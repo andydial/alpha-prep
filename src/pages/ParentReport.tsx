@@ -93,7 +93,7 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 export function ParentReport() {
-  const { profile } = useUser()
+  const { user, profile } = useUser()
   const [sessions, setSessions] = useState<Session[]>([])
   const [mastery, setMastery] = useState<Mastery[]>([])
   const [badges, setBadges] = useState<StudentBadge[]>([])
@@ -103,23 +103,30 @@ export function ParentReport() {
   const weekNumber = getWeekNumber(EXAM_DATE)
 
   useEffect(() => {
+    if (!user?.id) return
+    const parentId = user.id
     async function load() {
       setLoading(true)
       try {
-        // Fetch all sessions (requires parent RLS policy — see file header)
+        // Exclude the parent's own rows (test sessions) — show only the student's data.
+        // Requires parent RLS policies — see file header.
         const [sessRes, mastRes, badgeRes] = await Promise.all([
           supabase
             .from('sessions')
             .select('*')
+            .neq('student_id', parentId)
             .not('completed_at', 'is', null)
+            .neq('session_type', 'test')
             .order('started_at', { ascending: false }),
           supabase
             .from('mastery')
             .select('*')
+            .neq('student_id', parentId)
             .order('score_alltime', { ascending: true }),
           supabase
             .from('student_badges')
             .select('*, badge:badges(*)')
+            .neq('student_id', parentId)
             .order('earned_at', { ascending: false }),
         ])
         setSessions((sessRes.data ?? []) as Session[])
@@ -130,7 +137,7 @@ export function ParentReport() {
       }
     }
     void load()
-  }, [])
+  }, [user?.id])
 
   // Aggregate stats
   const stats: AggregateStats = sessions.reduce<AggregateStats>(

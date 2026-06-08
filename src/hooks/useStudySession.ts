@@ -132,7 +132,11 @@ export function useStudySession(
 
       const weekNum = getWeekNumber(EXAM_DATE)
       const { data: sessionData, error: sessionError } = await supabase
-        .from('sessions').insert({ student_id: user.id, session_type: 'practice', week_number: weekNum })
+        .from('sessions').insert({
+          student_id: user.id,
+          session_type: totalQuestions < 40 ? 'test' : 'practice',
+          week_number: weekNum,
+        })
         .select().single()
       if (sessionError || !sessionData) throw new Error('Failed to create session')
 
