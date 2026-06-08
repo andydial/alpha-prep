@@ -9,6 +9,7 @@ import { AnswerInput } from '../components/AnswerInput'
 import { ExplanationPanel } from '../components/ExplanationPanel'
 import { XPFlash } from '../components/XPFlash'
 import { SessionStreamBanner } from '../components/SessionStreamBanner'
+import { StreamTransitionScreen } from '../components/StreamTransitionScreen'
 import type { DomainPair } from '../types'
 
 export function Study() {
@@ -24,12 +25,15 @@ export function Study() {
     return ['maths', 'verbal']
   })
 
-  const { state, initSession, handleAnswer, handleNext, setHintUsed, QUESTIONS_PER_SESSION } =
-    useStudySession(user, plan ?? null, domainPair)
+  const {
+    state, initSession, handleAnswer, handleNext,
+    setHintUsed, dismissTransition, QUESTIONS_PER_SESSION,
+  } = useStudySession(user, plan ?? null, domainPair)
 
   const {
     currentQuestion, answered, isCorrect, xpEarned,
     hintUsed, showXPFlash, questionNumber, loading, error,
+    showStreamTransition,
   } = state
 
   useEffect(() => {
@@ -56,43 +60,62 @@ export function Study() {
     </div>
   )
 
+  // Spinner only for the very first load before any question exists
+  const isInitialLoad = loading && !currentQuestion
+
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4 py-8">
       <div className="w-full max-w-2xl space-y-4">
-        {loading || !currentQuestion ? (
+        {isInitialLoad ? (
           <div className="flex flex-col items-center gap-4 py-20">
             <Loader2 size={32} className="text-blue-400 animate-spin" />
             <p className="text-gray-400">Generating question…</p>
           </div>
         ) : (
           <>
+            {/* Banner always visible once the session is underway */}
             <SessionStreamBanner
               domainPair={state.domainPair}
               activeDomain={state.activeDomain}
               questionNumber={questionNumber}
             />
-            <QuestionCard
-              question={currentQuestion}
-              questionNumber={questionNumber}
-              totalQuestions={QUESTIONS_PER_SESSION}
-            />
-            {!answered ? (
-              <AnswerInput
-                question={currentQuestion}
-                onSubmit={(answer) => handleAnswer(answer, currentQuestion)}
-                disabled={answered}
-                hintUsed={hintUsed}
-                onHintRequest={setHintUsed}
+
+            {showStreamTransition ? (
+              <StreamTransitionScreen
+                domainPair={state.domainPair}
+                onContinue={dismissTransition}
               />
+            ) : loading ? (
+              <div className="flex flex-col items-center gap-4 py-16">
+                <Loader2 size={28} className="text-blue-400 animate-spin" />
+                <p className="text-gray-400 text-sm">Generating question…</p>
+              </div>
             ) : (
-              <ExplanationPanel
-                isCorrect={isCorrect}
-                correctAnswer={currentQuestion.correct_answer}
-                explanation={currentQuestion.explanation}
-                hintUsed={hintUsed}
-                xpEarned={xpEarned}
-                onNext={onNext}
-              />
+              <>
+                <QuestionCard
+                  question={currentQuestion!}
+                  questionNumber={questionNumber}
+                  totalQuestions={QUESTIONS_PER_SESSION}
+                />
+                {!answered ? (
+                  <AnswerInput
+                    question={currentQuestion!}
+                    onSubmit={(answer) => handleAnswer(answer, currentQuestion!)}
+                    disabled={answered}
+                    hintUsed={hintUsed}
+                    onHintRequest={setHintUsed}
+                  />
+                ) : (
+                  <ExplanationPanel
+                    isCorrect={isCorrect}
+                    correctAnswer={currentQuestion!.correct_answer}
+                    explanation={currentQuestion!.explanation}
+                    hintUsed={hintUsed}
+                    xpEarned={xpEarned}
+                    onNext={onNext}
+                  />
+                )}
+              </>
             )}
           </>
         )}

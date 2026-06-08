@@ -38,6 +38,7 @@ export interface StudySessionState {
   correctCount: number
   activeDomain: Domain
   domainPair: DomainPair
+  showStreamTransition: boolean
 }
 
 export function useStudySession(user: User | null, _plan: WeeklyPlan | null, domainPair: DomainPair) {
@@ -56,6 +57,7 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
     correctCount: 0,
     activeDomain: domainPair[0],
     domainPair,
+    showStreamTransition: false,
   })
 
   const sessionStartTime = useRef(0)
@@ -257,10 +259,21 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
       await finishSession()
       return true // signals navigate to results
     }
-    setState(prev => ({ ...prev, questionNumber: prev.questionNumber + 1 }))
-    await fetchNextQuestion(questionNumber + 1)
+    const nextNum = questionNumber + 1
+    if (questionNumber === streamBoundary.current) {
+      // Crossing from stream 1 to stream 2 — show transition screen instead of fetching
+      setState(prev => ({ ...prev, questionNumber: nextNum, showStreamTransition: true }))
+      return false
+    }
+    setState(prev => ({ ...prev, questionNumber: nextNum }))
+    await fetchNextQuestion(nextNum)
     return false
   }
 
-  return { state, initSession, handleAnswer, handleNext, setHintUsed, QUESTIONS_PER_SESSION }
+  async function dismissTransition() {
+    setState(prev => ({ ...prev, showStreamTransition: false }))
+    await fetchNextQuestion(streamBoundary.current + 1)
+  }
+
+  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, QUESTIONS_PER_SESSION }
 }
