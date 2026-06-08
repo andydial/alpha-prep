@@ -25,10 +25,17 @@ export function Study() {
     return ['maths', 'verbal']
   })
 
+  const [totalQuestions] = useState<number>(() => {
+    const raw = sessionStorage.getItem('sessionTestMode')
+    sessionStorage.removeItem('sessionTestMode')   // one-time flag — clear immediately
+    const n = raw ? parseInt(raw, 10) : NaN
+    return Number.isFinite(n) && n > 0 ? n : 40
+  })
+
   const {
     state, initSession, handleAnswer, handleNext,
     setHintUsed, dismissTransition, QUESTIONS_PER_SESSION,
-  } = useStudySession(user, plan ?? null, domainPair)
+  } = useStudySession(user, plan ?? null, domainPair, totalQuestions)
 
   const {
     currentQuestion, answered, isCorrect, xpEarned,

@@ -11,7 +11,6 @@ import {
 import { runSessionEnd } from '../lib/sessionEnd'
 import type { Question, Mastery, WeeklyPlan, Domain, DomainPair } from '../types'
 
-const QUESTIONS_PER_SESSION = 40
 const EXAM_DATE = new Date('2026-08-14')
 const DIFFICULTY_DEFAULT = 6
 
@@ -41,7 +40,12 @@ export interface StudySessionState {
   showStreamTransition: boolean
 }
 
-export function useStudySession(user: User | null, _plan: WeeklyPlan | null, domainPair: DomainPair) {
+export function useStudySession(
+  user: User | null,
+  _plan: WeeklyPlan | null,
+  domainPair: DomainPair,
+  totalQuestions = 40,
+) {
   const [state, setState] = useState<StudySessionState>({
     sessionId: null,
     currentQuestion: null,
@@ -170,7 +174,7 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
     }))
     if (correct) setTimeout(() => setState(prev => ({ ...prev, showXPFlash: false })), 1600)
 
-    const { error: attemptError } = await supabase.from('attempts').insert({
+    const baseAttempt = {
       session_id: sessionIdRef.current,
       student_id: user.id,
       topic_id: currentQuestion.topic_id,
@@ -184,21 +188,32 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
       time_seconds: timeTaken,
       ai_explanation: currentQuestion.explanation,
       hint_used: state.hintUsed,
-      xp_earned: xp,
-    })
+    }
+    let { error: attemptError } = await supabase.from('attempts').insert({ ...baseAttempt, xp_earned: xp })
+    if (attemptError?.code === '42703') {
+      // xp_earned column not yet migrated — insert without it
+      ;({ error: attemptError } = await supabase.from('attempts').insert(baseAttempt))
+    }
     if (attemptError) console.error('[handleAnswer] attempt insert failed:', attemptError)
   }
 
   async function finishSession() {
     const durationSeconds = Math.round((Date.now() - sessionStartTime.current) / 1000)
     if (sessionIdRef.current) {
-      const { error: sessionUpdateError } = await supabase.from('sessions').update({
+      const coreUpdate = {
         completed_at: new Date().toISOString(),
-        total_questions: QUESTIONS_PER_SESSION,
+        total_questions: totalQuestions,
         correct_count: correctCountRef.current,
-        xp_earned: totalXPRef.current,
         duration_seconds: durationSeconds,
+      }
+      let { error: sessionUpdateError } = await supabase.from('sessions').update({
+        ...coreUpdate,
+        xp_earned: totalXPRef.current,
       }).eq('id', sessionIdRef.current)
+      if (sessionUpdateError?.code === '42703') {
+        // xp_earned column not yet migrated — update without it
+        ;({ error: sessionUpdateError } = await supabase.from('sessions').update(coreUpdate).eq('id', sessionIdRef.current))
+      }
       if (sessionUpdateError) console.error('[finishSession] session update failed:', sessionUpdateError)
     }
     const topicNames = [...topicsUsed.current].map(id => getTopicById(id)?.name ?? id)
@@ -207,7 +222,7 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
     let sessionPayload: Record<string, unknown> = {
       sessionId: sessionIdRef.current,
       correctCount: correctCountRef.current,
-      totalQuestions: QUESTIONS_PER_SESSION,
+      totalQuestions: totalQuestions,
       xpEarned: totalXPRef.current,
       durationSeconds,
       topicNames,
@@ -257,7 +272,7 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
   }
 
   async function handleNext(questionNumber: number): Promise<boolean> {
-    if (questionNumber >= QUESTIONS_PER_SESSION) {
+    if (questionNumber >= totalQuestions) {
       await finishSession()
       return true // signals navigate to results
     }
@@ -277,5 +292,5 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
     await fetchNextQuestion(streamBoundary.current + 1)
   }
 
-  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, QUESTIONS_PER_SESSION }
+  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, QUESTIONS_PER_SESSION: totalQuestions }
 }

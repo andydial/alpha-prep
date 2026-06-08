@@ -143,6 +143,13 @@ export function Dashboard() {
   function handleStartSession() {
     const pair = pickedDomains ?? suggestedPair
     sessionStorage.setItem('sessionDomainPair', JSON.stringify(pair))
+    sessionStorage.removeItem('sessionTestMode')
+    navigate('/study')
+  }
+
+  function handleTestSession() {
+    sessionStorage.setItem('sessionDomainPair', JSON.stringify(['maths', 'verbal']))
+    sessionStorage.setItem('sessionTestMode', '3')
     navigate('/study')
   }
 
@@ -253,6 +260,16 @@ export function Dashboard() {
           className="w-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl font-semibold text-lg py-4 transition-all duration-150"
         >
           {isFirstTimeUser ? 'Start First Session' : 'Start Session'}
+        </button>
+      )}
+
+      {/* Parent-only test shortcut */}
+      {profile?.role === 'parent' && (
+        <button
+          onClick={handleTestSession}
+          className="w-full py-2 border border-dashed border-amber-700/50 text-amber-700/70 hover:border-amber-600 hover:text-amber-600 rounded-xl text-xs font-medium transition-colors"
+        >
+          🧪 Test: Run 3Q Mini Session
         </button>
       )}
 
