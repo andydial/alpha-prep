@@ -10,6 +10,7 @@ interface PlanPayload {
   themeDescription: string
   dailyGoal: number
   rationale: string
+  domainRotation: [string, string][]
 }
 
 async function callAnthropicForPlan(
@@ -19,15 +20,21 @@ async function callAnthropicForPlan(
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('Missing Anthropic API key')
 
-  const prompt = `You are planning Week ${weekNumber} of 8 for a high-achieving Year 6 student preparing for the EDSC Alpha selective entry exam.
+  const prompt = `You are planning Week ${weekNumber} of 8 for Aarav's EDSC Alpha exam preparation.
 
 Current mastery scores (0-100%):
-${masteryScores.map(m => `- ${m.topicName} (id: ${m.topicId}): ${Math.round(m.score * 100)}%`).join('\n')}
+${masteryScores.map(m => `- ${m.topicName}: ${Math.round(m.score * 100)}%`).join('\n')}
 
-Choose 2 focus topics for this week. Prioritise:
-1. Topics with lowest mastery scores (they need the most work)
-2. Topics that are heavily tested in ACER-style selective entry exams (maths reasoning, verbal reasoning, abstract reasoning)
-3. Variety — try to pick topics from different domains where possible
+Choose 2 focus topics for this week AND provide a 5-session domain rotation that guarantees all 4 exam domains (maths, reading, verbal, abstract) are touched across the week.
+
+Exam domain guidance:
+- Pairs should mix strengths with weaknesses for each session
+- Use this baseline rotation unless mastery data suggests otherwise:
+  Session 1: maths + verbal
+  Session 2: reading + abstract
+  Session 3: maths + abstract
+  Session 4: verbal + reading
+  Session 5: the two lowest-scoring domains
 
 Respond with JSON only — no markdown, no preamble:
 {
@@ -35,7 +42,14 @@ Respond with JSON only — no markdown, no preamble:
   "secondaryTopicId": "different exact topic id from the list above",
   "themeDescription": "one sentence — e.g. Fractions mastery + Verbal analogies",
   "dailyGoal": 15,
-  "rationale": "2-3 sentences explaining why these topics this week based on the mastery data"
+  "rationale": "2-3 sentences explaining why these topics and this rotation this week based on the mastery data",
+  "domainRotation": [
+    ["maths", "verbal"],
+    ["reading", "abstract"],
+    ["maths", "abstract"],
+    ["verbal", "reading"],
+    ["<weakest_domain>", "<second_weakest_domain>"]
+  ]
 }`
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -48,7 +62,7 @@ Respond with JSON only — no markdown, no preamble:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 400,
+      max_tokens: 600,
       messages: [{ role: 'user', content: prompt }],
     }),
   })
@@ -98,6 +112,7 @@ export async function generateWeeklyPlan(
         theme_description: plan.themeDescription,
         daily_goal_questions: plan.dailyGoal,
         ai_rationale: plan.rationale,
+        domain_rotation: plan.domainRotation,
       })
       .select()
       .single()

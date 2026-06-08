@@ -4,11 +4,12 @@ import { supabase } from '../lib/supabase'
 import { generateQuestion } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
 import {
-  selectTopicForSession, getTopicById,
+  getTopicById,
   getInitialDifficulty, getNextDifficulty, calculateXP, getWeekNumber,
+  selectTopicFromDomain,
 } from '../lib/curriculum'
 import { runSessionEnd } from '../lib/sessionEnd'
-import type { Question, Mastery, WeeklyPlan } from '../types'
+import type { Question, Mastery, WeeklyPlan, Domain, DomainPair } from '../types'
 
 const QUESTIONS_PER_SESSION = 15
 const EXAM_DATE = new Date('2026-08-14')
@@ -35,9 +36,11 @@ export interface StudySessionState {
   error: string | null
   totalXP: number
   correctCount: number
+  activeDomain: Domain
+  domainPair: DomainPair
 }
 
-export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
+export function useStudySession(user: User | null, _plan: WeeklyPlan | null, domainPair: DomainPair) {
   const [state, setState] = useState<StudySessionState>({
     sessionId: null,
     currentQuestion: null,
@@ -51,6 +54,8 @@ export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
     error: null,
     totalXP: 0,
     correctCount: 0,
+    activeDomain: domainPair[0],
+    domainPair,
   })
 
   const sessionStartTime = useRef(0)
@@ -65,11 +70,26 @@ export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
   const correctCountRef = useRef(0)
   const totalXPRef = useRef(0)
   const allAttempts = useRef<{ topicId: string; isCorrect: boolean; difficulty: number; timeTaken: number }[]>([])
+  const streamBoundary = useRef(7) // questions 1-7 = stream 0; 8-15 = stream 1
 
-  const fetchNextQuestion = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, answered: false, hintUsed: false }))
+  const fetchNextQuestion = useCallback(async (questionNum: number) => {
+    // Determine which stream domain based on question number
+    const activeDomain = questionNum <= streamBoundary.current
+      ? domainPair[0]
+      : domainPair[1]
+
+    setState(prev => ({
+      ...prev,
+      loading: true,
+      answered: false,
+      hintUsed: false,
+      activeDomain,
+    }))
+
+    topicId.current = selectTopicFromDomain(activeDomain, masteryRef.current)
     const topic = getTopicById(topicId.current)
     const weekNum = getWeekNumber(EXAM_DATE)
+
     try {
       const q = await generateQuestion({
         topicId: topicId.current,
@@ -88,16 +108,17 @@ export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
       questionStartTime.current = Date.now()
       setState(prev => ({ ...prev, currentQuestion: fallback, loading: false }))
     }
-  }, [])
+  }, [domainPair])
 
   async function initSession() {
     if (!user) return
     try {
       const { data: mastery } = await supabase.from('mastery').select('*').eq('student_id', user.id)
       masteryRef.current = mastery ?? []
-      topicId.current = selectTopicForSession(masteryRef.current, plan)
-      const topic = getTopicById(topicId.current)
-      currentDifficulty.current = getInitialDifficulty(topic?.difficulty_base ?? DIFFICULTY_DEFAULT)
+
+      // Initialise difficulty from first domain's representative topic
+      const firstTopic = getTopicById(selectTopicFromDomain(domainPair[0], mastery ?? []))
+      currentDifficulty.current = getInitialDifficulty(firstTopic?.difficulty_base ?? DIFFICULTY_DEFAULT)
       sessionStartTime.current = Date.now()
 
       const weekNum = getWeekNumber(EXAM_DATE)
@@ -108,7 +129,7 @@ export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
 
       sessionIdRef.current = sessionData.id
       setState(prev => ({ ...prev, sessionId: sessionData.id }))
-      await fetchNextQuestion()
+      await fetchNextQuestion(1)
     } catch (err) {
       console.error(err)
       setState(prev => ({ ...prev, error: 'Could not start session. Please try again.', loading: false }))
@@ -237,7 +258,7 @@ export function useStudySession(user: User | null, plan: WeeklyPlan | null) {
       return true // signals navigate to results
     }
     setState(prev => ({ ...prev, questionNumber: prev.questionNumber + 1 }))
-    await fetchNextQuestion()
+    await fetchNextQuestion(questionNumber + 1)
     return false
   }
 

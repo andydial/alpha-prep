@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useUser } from '../hooks/useUser'
@@ -8,13 +8,24 @@ import { QuestionCard } from '../components/QuestionCard'
 import { AnswerInput } from '../components/AnswerInput'
 import { ExplanationPanel } from '../components/ExplanationPanel'
 import { XPFlash } from '../components/XPFlash'
+import { SessionStreamBanner } from '../components/SessionStreamBanner'
+import type { DomainPair } from '../types'
 
 export function Study() {
   const navigate = useNavigate()
   const { user } = useUser()
   const { plan } = useWeeklyPlan(user?.id)
+
+  const [domainPair] = useState<DomainPair>(() => {
+    try {
+      const raw = sessionStorage.getItem('sessionDomainPair')
+      if (raw) return JSON.parse(raw) as DomainPair
+    } catch { /* ignore */ }
+    return ['maths', 'verbal']
+  })
+
   const { state, initSession, handleAnswer, handleNext, setHintUsed, QUESTIONS_PER_SESSION } =
-    useStudySession(user, plan ?? null)
+    useStudySession(user, plan ?? null, domainPair)
 
   const {
     currentQuestion, answered, isCorrect, xpEarned,
@@ -55,6 +66,11 @@ export function Study() {
           </div>
         ) : (
           <>
+            <SessionStreamBanner
+              domainPair={state.domainPair}
+              activeDomain={state.activeDomain}
+              questionNumber={questionNumber}
+            />
             <QuestionCard
               question={currentQuestion}
               questionNumber={questionNumber}

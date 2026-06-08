@@ -1,10 +1,28 @@
-import type { Topic, Mastery, WeeklyPlan, LevelInfo } from '../types'
+import type { Topic, Mastery, WeeklyPlan, LevelInfo, Domain, DomainPair } from '../types'
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 export const DIFFICULTY_FLOOR = 5
 export const DIFFICULTY_CEILING = 10
 export const DIFFICULTY_DEFAULT = 6
+
+export const DOMAIN_NAMES: Record<Domain, string> = {
+  maths:    'Maths',
+  reading:  'Reading',
+  verbal:   'Verbal Reasoning',
+  abstract: 'Abstract Reasoning',
+  writing:  'Writing',
+}
+
+// 5-session weekly rotation covering all 4 exam domains.
+// Index 4 is null = pick the two weakest domains at runtime.
+export const WEEKLY_ROTATION: (DomainPair | null)[] = [
+  ['maths',    'verbal'],
+  ['reading',  'abstract'],
+  ['maths',    'abstract'],
+  ['verbal',   'reading'],
+  null,
+]
 
 export const LEVELS: LevelInfo[] = [
   { level: 1, title: 'Learner',    xpRequired: 0 },
@@ -169,6 +187,76 @@ export function getTopicById(topicId: string): Topic | undefined {
 
 export function getTopicsByDomain(domain: Topic['domain']): Topic[] {
   return TOPICS.filter(t => t.domain === domain)
+}
+
+// Returns exam domains sorted by average mastery score ascending (weakest first).
+// Ignores 'writing' domain (not in ACER exam).
+export function getWeakestDomains(mastery: Mastery[]): Domain[] {
+  const examDomains: Domain[] = ['maths', 'reading', 'verbal', 'abstract']
+  const avgByDomain = examDomains.map(domain => {
+    const topicIds = TOPICS.filter(t => t.domain === domain).map(t => t.id)
+    const rows = mastery.filter(m => topicIds.includes(m.topic_id))
+    const avg = rows.length > 0
+      ? rows.reduce((sum, m) => sum + m.score_alltime, 0) / rows.length
+      : 0
+    return { domain, avg }
+  })
+  return avgByDomain.sort((a, b) => a.avg - b.avg).map(d => d.domain)
+}
+
+/**
+ * Returns the domain pair for a session.
+ * Priority:
+ *   1. weekly_plan.domain_rotation[sessionIndex] if set
+ *   2. Derive from plan primary/secondary topic domains
+ *   3. Two weakest mastery domains
+ */
+export function getSessionDomainPair(
+  mastery: Mastery[],
+  weeklyPlan: WeeklyPlan | null,
+  sessionIndexThisWeek: number,
+): DomainPair {
+  // 1. Explicit rotation from plan
+  if (weeklyPlan?.domain_rotation) {
+    const slot = weeklyPlan.domain_rotation[sessionIndexThisWeek % weeklyPlan.domain_rotation.length]
+    if (slot) return slot
+  }
+
+  // 2. Derive from plan primary/secondary topics
+  if (weeklyPlan?.primary_topic_id && weeklyPlan?.secondary_topic_id) {
+    const d1 = getTopicById(weeklyPlan.primary_topic_id)?.domain
+    const d2 = getTopicById(weeklyPlan.secondary_topic_id)?.domain
+    if (d1 && d2 && d1 !== d2) return [d1 as Domain, d2 as Domain]
+    if (d1) {
+      const weakest = getWeakestDomains(mastery).find(d => d !== d1) ?? 'verbal'
+      return [d1 as Domain, weakest]
+    }
+  }
+
+  // 3. Two weakest domains
+  const weakest = getWeakestDomains(mastery)
+  return [weakest[0] ?? 'maths', weakest[1] ?? 'verbal']
+}
+
+/**
+ * Picks a topic ID from the given domain, weighted toward lower mastery.
+ * Falls back to a random topic in the domain if mastery data is sparse.
+ */
+export function selectTopicFromDomain(domain: Domain, mastery: Mastery[]): string {
+  const domainTopics = TOPICS.filter(t => t.domain === domain && t.active)
+  if (domainTopics.length === 0) return TOPICS[0].id
+
+  // Find the topic with the lowest mastery score (or unattempted)
+  const scored = domainTopics.map(t => {
+    const m = mastery.find(r => r.topic_id === t.id)
+    return { topicId: t.id, score: m?.score_alltime ?? -1 } // -1 = unattempted (prioritise)
+  })
+  scored.sort((a, b) => a.score - b.score)
+
+  // 60% chance: pick the weakest topic; 40% chance: random from bottom half
+  const bottomHalf = scored.slice(0, Math.max(1, Math.ceil(scored.length / 2)))
+  if (Math.random() < 0.6) return scored[0].topicId
+  return bottomHalf[Math.floor(Math.random() * bottomHalf.length)].topicId
 }
 
 // ── Week Number ──────────────────────────────────────────────────────────────

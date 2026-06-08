@@ -10,9 +10,12 @@ export interface Profile {
   created_at: string
 }
 
+export type Domain = 'maths' | 'reading' | 'verbal' | 'abstract' | 'writing'
+export type DomainPair = [Domain, Domain]
+
 export interface Topic {
   id: string
-  domain: 'maths' | 'reading' | 'verbal' | 'abstract' | 'writing'
+  domain: Domain
   name: string
   year_level: number
   difficulty_base: number
@@ -75,6 +78,7 @@ export interface WeeklyPlan {
   daily_goal_questions: number
   ai_rationale: string | null
   created_at: string
+  domain_rotation: DomainPair[] | null
 }
 
 export interface Question {
