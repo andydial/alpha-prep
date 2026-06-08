@@ -101,21 +101,31 @@ export async function generateWeeklyPlan(
   try {
     const plan = await callAnthropicForPlan(weekNumber, masteryScores)
 
-    const { data, error } = await supabase
+    const baseRow = {
+      student_id: studentId,
+      week_number: weekNumber,
+      week_start: weekStart,
+      primary_topic_id: plan.primaryTopicId,
+      secondary_topic_id: plan.secondaryTopicId,
+      theme_description: plan.themeDescription,
+      daily_goal_questions: plan.dailyGoal,
+      ai_rationale: plan.rationale,
+    }
+
+    let { data, error } = await supabase
       .from('weekly_plans')
-      .insert({
-        student_id: studentId,
-        week_number: weekNumber,
-        week_start: weekStart,
-        primary_topic_id: plan.primaryTopicId,
-        secondary_topic_id: plan.secondaryTopicId,
-        theme_description: plan.themeDescription,
-        daily_goal_questions: plan.dailyGoal,
-        ai_rationale: plan.rationale,
-        domain_rotation: plan.domainRotation,
-      })
+      .insert({ ...baseRow, domain_rotation: plan.domainRotation })
       .select()
       .single()
+
+    if (error?.code === '42703') {
+      // domain_rotation column not yet migrated — insert without it
+      ;({ data, error } = await supabase
+        .from('weekly_plans')
+        .insert(baseRow)
+        .select()
+        .single())
+    }
 
     if (error) throw error
     return data as WeeklyPlan

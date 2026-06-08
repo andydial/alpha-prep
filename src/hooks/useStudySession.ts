@@ -11,7 +11,7 @@ import {
 import { runSessionEnd } from '../lib/sessionEnd'
 import type { Question, Mastery, WeeklyPlan, Domain, DomainPair } from '../types'
 
-const QUESTIONS_PER_SESSION = 15
+const QUESTIONS_PER_SESSION = 40
 const EXAM_DATE = new Date('2026-08-14')
 const DIFFICULTY_DEFAULT = 6
 
@@ -69,10 +69,11 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
   const masteryRef = useRef<Mastery[]>([])
   const topicsUsed = useRef<Set<string>>(new Set())
   const sessionIdRef = useRef<string | null>(null)
+  const sessionStarted = useRef(false)
   const correctCountRef = useRef(0)
   const totalXPRef = useRef(0)
   const allAttempts = useRef<{ topicId: string; isCorrect: boolean; difficulty: number; timeTaken: number }[]>([])
-  const streamBoundary = useRef(7) // questions 1-7 = stream 0; 8-15 = stream 1
+  const streamBoundary = useRef(20) // questions 1-20 = block 1; 21-40 = block 2
 
   const fetchNextQuestion = useCallback(async (questionNum: number) => {
     // Determine which stream domain based on question number
@@ -113,7 +114,9 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
   }, [domainPair])
 
   async function initSession() {
+    if (sessionStarted.current) return
     if (!user) return
+    sessionStarted.current = true
     try {
       const { data: mastery } = await supabase.from('mastery').select('*').eq('student_id', user.id)
       masteryRef.current = mastery ?? []
@@ -133,6 +136,7 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
       setState(prev => ({ ...prev, sessionId: sessionData.id }))
       await fetchNextQuestion(1)
     } catch (err) {
+      sessionStarted.current = false  // allow retry if init truly failed
       console.error(err)
       setState(prev => ({ ...prev, error: 'Could not start session. Please try again.', loading: false }))
     }
@@ -166,38 +170,36 @@ export function useStudySession(user: User | null, _plan: WeeklyPlan | null, dom
     }))
     if (correct) setTimeout(() => setState(prev => ({ ...prev, showXPFlash: false })), 1600)
 
-    try {
-      await supabase.from('attempts').insert({
-        session_id: sessionIdRef.current,
-        student_id: user.id,
-        topic_id: currentQuestion.topic_id,
-        question_text: currentQuestion.question,
-        question_type: currentQuestion.type,
-        options: currentQuestion.options,
-        correct_answer: currentQuestion.correct_answer,
-        student_answer: studentAnswer,
-        is_correct: correct,
-        difficulty: currentQuestion.difficulty,
-        time_seconds: timeTaken,
-        ai_explanation: currentQuestion.explanation,
-        hint_used: state.hintUsed,
-        xp_earned: xp,
-      })
-    } catch (err) { console.error('Failed to save attempt:', err) }
+    const { error: attemptError } = await supabase.from('attempts').insert({
+      session_id: sessionIdRef.current,
+      student_id: user.id,
+      topic_id: currentQuestion.topic_id,
+      question_text: currentQuestion.question,
+      question_type: currentQuestion.type,
+      options: currentQuestion.options,
+      correct_answer: currentQuestion.correct_answer,
+      student_answer: studentAnswer,
+      is_correct: correct,
+      difficulty: currentQuestion.difficulty,
+      time_seconds: timeTaken,
+      ai_explanation: currentQuestion.explanation,
+      hint_used: state.hintUsed,
+      xp_earned: xp,
+    })
+    if (attemptError) console.error('[handleAnswer] attempt insert failed:', attemptError)
   }
 
   async function finishSession() {
     const durationSeconds = Math.round((Date.now() - sessionStartTime.current) / 1000)
     if (sessionIdRef.current) {
-      try {
-        await supabase.from('sessions').update({
-          completed_at: new Date().toISOString(),
-          total_questions: QUESTIONS_PER_SESSION,
-          correct_count: correctCountRef.current,
-          xp_earned: totalXPRef.current,
-          duration_seconds: durationSeconds,
-        }).eq('id', sessionIdRef.current)
-      } catch (err) { console.error('Failed to update session:', err) }
+      const { error: sessionUpdateError } = await supabase.from('sessions').update({
+        completed_at: new Date().toISOString(),
+        total_questions: QUESTIONS_PER_SESSION,
+        correct_count: correctCountRef.current,
+        xp_earned: totalXPRef.current,
+        duration_seconds: durationSeconds,
+      }).eq('id', sessionIdRef.current)
+      if (sessionUpdateError) console.error('[finishSession] session update failed:', sessionUpdateError)
     }
     const topicNames = [...topicsUsed.current].map(id => getTopicById(id)?.name ?? id)
 

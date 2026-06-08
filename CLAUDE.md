@@ -722,4 +722,69 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 
 ---
 
+---
+
+## Current Status & Known Issues (Updated June 2026)
+
+### App Status
+- ✅ Deployed to Netlify
+- ✅ Supabase schema + topics seeded
+- ✅ Auth working for both Aarav (student) and Andy (parent)
+- ✅ Question generation via Anthropic API working
+- ✅ 2-domain block session structure built
+- ❌ Session results not saving to Supabase correctly
+- ❌ Dashboard not reflecting completed sessions or weekly plan
+- ❌ Parent Report showing "No session data" — RLS policy missing for parent role
+- ❌ Window focus/tab switch triggers new question generation (loses current question)
+- ❌ Weekly plan generates but doesn't display on dashboard
+
+### Known Bugs to Fix (in priority order)
+
+**Bug 1 — Session not saving:**
+The full save flow needs debugging: session + attempts insert into Supabase on completion, dashboard useProgress hook refetches after save, ParentReport RLS policy added for parent role to read student data.
+
+**Bug 2 — Window focus generates new question:**
+Questions must only advance on explicit user action (submit answer / next button). Never regenerate on window visibility change or tab switch. Persist current question in component state.
+
+**Bug 3 — Weekly plan not displaying:**
+Dashboard Week Focus card not reading generated plan from Supabase. Fix fetch/display logic.
+
+**Bug 4 — Domain blocks not strict:**
+Block 1 (Q1-8) must be exclusively Domain 1. Block 2 (Q9-15) exclusively Domain 2. Add full-screen transition card between blocks.
+
+### RLS Policy Needed for Parent Report
+Run this in Supabase SQL editor to allow parent account to read Aarav's data:
+
+```sql
+create policy "parent can read all sessions"
+  on public.sessions for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role = 'parent'
+    )
+  );
+
+create policy "parent can read all attempts"
+  on public.attempts for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role = 'parent'
+    )
+  );
+
+create policy "parent can read all mastery"
+  on public.mastery for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.role = 'parent'
+    )
+  );
+```
+
 *Last updated: June 2026 | Stack: React 18 + Vite + Supabase + Anthropic API | Target: EDSC Alpha entrance exam*

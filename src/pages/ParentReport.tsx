@@ -1,21 +1,46 @@
 /**
  * ParentReport — a parent-only view of the student's full progress.
  *
- * RLS NOTE: The default Supabase policies only allow each user to see their own
- * rows. For the parent to see the student's data you must run the following SQL
- * in the Supabase dashboard (replace the parent user's UUID as needed):
+ * RLS NOTE: Run the following SQL in the Supabase SQL Editor so the parent
+ * account can read the student's data. The profiles.role column must be 'parent'
+ * for the parent user (set this via: update public.profiles set role = 'parent' where id = '<parent-uuid>').
  *
- *   create policy "parent reads all sessions"
+ *   create policy "parent reads sessions"
  *     on public.sessions for select
  *     using (exists (
  *       select 1 from public.profiles
  *       where id = auth.uid() and role = 'parent'
  *     ));
  *
- *   -- Repeat the same pattern for: attempts, mastery, weekly_plans
+ *   create policy "parent reads attempts"
+ *     on public.attempts for select
+ *     using (exists (
+ *       select 1 from public.profiles
+ *       where id = auth.uid() and role = 'parent'
+ *     ));
  *
- * Until those policies are in place the tables will return empty arrays for the
- * parent — which the UI handles gracefully with "No data yet" states.
+ *   create policy "parent reads mastery"
+ *     on public.mastery for select
+ *     using (exists (
+ *       select 1 from public.profiles
+ *       where id = auth.uid() and role = 'parent'
+ *     ));
+ *
+ *   create policy "parent reads weekly_plans"
+ *     on public.weekly_plans for select
+ *     using (exists (
+ *       select 1 from public.profiles
+ *       where id = auth.uid() and role = 'parent'
+ *     ));
+ *
+ *   create policy "parent reads student_badges"
+ *     on public.student_badges for select
+ *     using (exists (
+ *       select 1 from public.profiles
+ *       where id = auth.uid() and role = 'parent'
+ *     ));
+ *
+ * Until those policies are in place the tables return empty arrays for the parent.
  */
 
 import { useEffect, useState } from 'react'
@@ -188,9 +213,10 @@ export function ParentReport() {
         {noData ? (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 text-center print:border-gray-200">
             <p className="text-gray-400 text-sm">No session data available yet.</p>
-            <p className="text-gray-600 text-xs mt-2">
-              If data exists but is not showing, a Supabase parent read policy may be needed.
-              See the comment at the top of ParentReport.tsx for the required SQL.
+            <p className="text-gray-600 text-xs mt-2 leading-relaxed">
+              If Aarav has completed sessions but they are not showing here, run the five RLS policies
+              from the comment at the top of <code className="text-gray-500">ParentReport.tsx</code> in
+              the Supabase SQL Editor, then refresh this page.
             </p>
           </div>
         ) : (

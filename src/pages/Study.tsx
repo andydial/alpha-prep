@@ -83,6 +83,8 @@ export function Study() {
             {showStreamTransition ? (
               <StreamTransitionScreen
                 domainPair={state.domainPair}
+                correctCount={state.correctCount}
+                questionsInBlock={QUESTIONS_PER_SESSION / 2}
                 onContinue={dismissTransition}
               />
             ) : loading ? (

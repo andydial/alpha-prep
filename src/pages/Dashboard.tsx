@@ -102,7 +102,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const { user, profile, loading: userLoading } = useUser()
   const { mastery, loading: masteryLoading } = useProgress(user?.id)
-  const { plan, loading: planLoading } = useWeeklyPlan(user?.id)
+  const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
   const [showSessionConfig, setShowSessionConfig] = useState(false)
@@ -150,10 +150,14 @@ export function Dashboard() {
     if (!user?.id) return
     setGeneratingPlan(true)
     try {
-      await generateWeeklyPlan(user.id, mastery)
-      window.location.reload()
+      const result = await generateWeeklyPlan(user.id, mastery)
+      if (result) {
+        await refetchPlan()
+      } else {
+        console.error('[handleGeneratePlan] generation returned null — check Supabase logs for insert error')
+      }
     } catch (err) {
-      console.error('Plan generation failed:', err)
+      console.error('[handleGeneratePlan] failed:', err)
     } finally {
       setGeneratingPlan(false)
     }

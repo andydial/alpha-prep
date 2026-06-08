@@ -68,7 +68,7 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
       ? recent.filter(a => a.is_correct).length / recent.length
       : scoreAlltime
 
-    await supabase.from('mastery').upsert({
+    const { error: upsertError } = await supabase.from('mastery').upsert({
       student_id: studentId,
       topic_id: topicId,
       attempts_total: newTotal,
@@ -77,6 +77,7 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
       score_7day: score7day,
       last_updated: new Date().toISOString(),
     }, { onConflict: 'student_id,topic_id' })
+    if (upsertError) console.error('[runSessionEnd] mastery upsert failed:', topicId, upsertError)
   }
 
   // ── 2. Update XP + Level ─────────────────────────────────────────────────
@@ -103,13 +104,14 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
     .single()
 
   const currentBest = profileData?.streak_best ?? 0
-  await supabase.from('profiles').update({
+  const { error: profileUpdateError } = await supabase.from('profiles').update({
     xp_total: newXPTotal,
     level: newLevelInfo.level,
     streak_current: newStreak,
     streak_best: Math.max(currentBest, newStreak),
     last_session_date: today,
   }).eq('id', studentId)
+  if (profileUpdateError) console.error('[runSessionEnd] profile update failed:', profileUpdateError)
 
   // ── 5. Check and award badges ─────────────────────────────────────────────
   const badgesEarned: string[] = []
@@ -122,7 +124,8 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
 
   async function maybeAward(badgeId: string) {
     if (alreadyEarned.has(badgeId)) return
-    await supabase.from('student_badges').insert({ student_id: studentId, badge_id: badgeId })
+    const { error: badgeError } = await supabase.from('student_badges').insert({ student_id: studentId, badge_id: badgeId })
+    if (badgeError) { console.error('[runSessionEnd] badge insert failed:', badgeId, badgeError); return }
     alreadyEarned.add(badgeId)
     badgesEarned.push(badgeId)
   }
@@ -173,10 +176,11 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
   if (topics85.some(t => verbalTopics.includes(t)))   await maybeAward('verbal_pro')
   if (topics85.some(t => abstractTopics.includes(t))) await maybeAward('abstract_genius')
 
-  await supabase
+  const { error: notesError } = await supabase
     .from('sessions')
     .update({ notes: `XP: +${xpEarned} | Level: ${newLevelInfo.level} | Streak: ${newStreak}` })
     .eq('id', sessionId)
+  if (notesError) console.error('[runSessionEnd] session notes update failed:', notesError)
 
   return { newXPTotal, newLevel: newLevelInfo.level, leveledUp, newStreak, badgesEarned }
 }

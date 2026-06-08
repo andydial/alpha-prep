@@ -26,7 +26,7 @@ export function SessionStreamBanner({
   return (
     <div className="flex items-center gap-2 px-1 mb-1">
       <span className="text-xs text-gray-500 font-medium uppercase tracking-wide mr-1">
-        Today's streams
+        Today's blocks
       </span>
       <DomainChip domain={d1} active={isD1Active} colour={DOMAIN_COLOUR[d1]} />
       <span className="text-gray-600 text-xs">+</span>
