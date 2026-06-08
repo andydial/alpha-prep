@@ -1,0 +1,77 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Login } from './pages/Login'
+import { Study } from './pages/Study'
+import { Results } from './pages/Results'
+import { Dashboard } from './pages/Dashboard'
+import { Progress } from './pages/Progress'
+import { ParentReport } from './pages/ParentReport'
+import { AuthGuard } from './components/AuthGuard'
+import { NavBar } from './components/NavBar'
+
+function AuthLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-950">
+      <NavBar />
+      {children}
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          path="/dashboard"
+          element={
+            <AuthGuard>
+              <AuthLayout><Dashboard /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/study"
+          element={
+            <AuthGuard>
+              <AuthLayout><Study /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/study/results"
+          element={
+            <AuthGuard>
+              <AuthLayout><Results /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/progress"
+          element={
+            <AuthGuard>
+              <AuthLayout><Progress /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/progress/:topicId"
+          element={
+            <AuthGuard>
+              <AuthLayout><Progress /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/report"
+          element={
+            <AuthGuard requireRole="parent">
+              <AuthLayout><ParentReport /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  )
+}
