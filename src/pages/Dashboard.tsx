@@ -46,7 +46,9 @@ export function Dashboard() {
     generateWeeklyPlan(user.id, mastery)
       .then(result => { void refetchPlan() ; return result })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = err instanceof Error
+          ? err.message
+          : (err !== null && typeof err === 'object' ? JSON.stringify(err) : String(err))
         setPlanGenError(msg)
       })
       .finally(() => setGeneratingPlan(false))
