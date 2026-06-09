@@ -58,8 +58,12 @@ export function NavBar() {
         {/* Desktop links */}
         <div className="hidden sm:flex items-center gap-1">
           <NavItem to="/dashboard" label="Dashboard" />
-          <NavItem to="/study" label="Study" />
-          <NavItem to="/progress" label="Progress" />
+          {profile?.role !== 'parent' && (
+            <>
+              <NavItem to="/study" label="Study" />
+              <NavItem to="/progress" label="Progress" />
+            </>
+          )}
           {profile?.role === 'parent' && (
             <NavItem to="/report" label="Report" />
           )}
@@ -67,11 +71,13 @@ export function NavBar() {
 
         {/* Right side: level + name + sign out */}
         <div className="hidden sm:flex items-center gap-3">
-          {profile && levelTitle && (
+          {profile && (
             <div className="flex items-center gap-2">
-              <span className="text-xs bg-blue-900/60 text-blue-300 rounded-full px-2.5 py-0.5 font-semibold">
-                Lv {profile.level} · {levelTitle}
-              </span>
+              {levelTitle && profile.role !== 'parent' && (
+                <span className="text-xs bg-blue-900/60 text-blue-300 rounded-full px-2.5 py-0.5 font-semibold">
+                  Lv {profile.level} · {levelTitle}
+                </span>
+              )}
               <span className="text-gray-400 text-sm">{profile.display_name}</span>
             </div>
           )}
@@ -105,8 +111,12 @@ export function NavBar() {
       {menuOpen && (
         <div className="sm:hidden border-t border-gray-800 px-4 py-3 space-y-1 bg-gray-950">
           <NavItem to="/dashboard" label="Dashboard" onClick={() => setMenuOpen(false)} />
-          <NavItem to="/study" label="Study" onClick={() => setMenuOpen(false)} />
-          <NavItem to="/progress" label="Progress" onClick={() => setMenuOpen(false)} />
+          {profile?.role !== 'parent' && (
+            <>
+              <NavItem to="/study" label="Study" onClick={() => setMenuOpen(false)} />
+              <NavItem to="/progress" label="Progress" onClick={() => setMenuOpen(false)} />
+            </>
+          )}
           {profile?.role === 'parent' && (
             <NavItem to="/report" label="Report" onClick={() => setMenuOpen(false)} />
           )}

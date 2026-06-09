@@ -38,7 +38,7 @@ export function Dashboard() {
 
   // Auto-generate this week's plan on first login of the week when none exists
   useEffect(() => {
-    if (planLoading || masteryLoading || plan || !user?.id || generationAttempted.current) return
+    if (planLoading || masteryLoading || plan || !user?.id || profile?.role !== 'student' || generationAttempted.current) return
     generationAttempted.current = true
     setGeneratingPlan(true)
     void generateWeeklyPlan(user.id, mastery)
@@ -49,7 +49,7 @@ export function Dashboard() {
       .finally(() => setGeneratingPlan(false))
   // mastery and refetchPlan are stable between renders; ref guard prevents re-runs
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planLoading, masteryLoading, plan, user?.id])
+  }, [planLoading, masteryLoading, plan, user?.id, profile?.role])
 
   const weekNumber = getWeekNumber(EXAM_DATE)
 
