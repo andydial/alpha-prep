@@ -112,3 +112,12 @@ export interface LevelInfo {
   title: string
   xpRequired: number
 }
+
+export type SessionMode = 'planned' | 'domain' | 'topic'
+
+export interface SessionConfig {
+  mode: SessionMode
+  domainPair: DomainPair
+  totalQuestions: number
+  forcedTopicId?: string
+}

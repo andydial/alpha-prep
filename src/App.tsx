@@ -34,7 +34,7 @@ export default function App() {
         <Route
           path="/study"
           element={
-            <AuthGuard>
+            <AuthGuard requireRole="student">
               <AuthLayout><Study /></AuthLayout>
             </AuthGuard>
           }
@@ -42,7 +42,7 @@ export default function App() {
         <Route
           path="/study/results"
           element={
-            <AuthGuard>
+            <AuthGuard requireRole="student">
               <AuthLayout><Results /></AuthLayout>
             </AuthGuard>
           }

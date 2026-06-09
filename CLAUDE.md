@@ -249,6 +249,10 @@ insert into public.topics (id, domain, name, difficulty_base) values
 ('writing_narrative', 'writing', 'Narrative Writing', 5);
 ```
 
+### Helper Functions
+
+- `public.is_parent_user()` — SECURITY DEFINER function, used in all parent RLS policies to avoid recursive profile lookups.
+
 ---
 
 ## Victorian Curriculum Alignment
@@ -691,6 +695,7 @@ npx tailwindcss init -p
 11. **Explanation always shown** — even for correct answers (builds understanding, not pattern matching)
 12. **Hints cost XP** — 30% reduction, but never block access — challenge without punishment
 13. **Parent can see everything** — student sees only their own dashboard
+14. **Session exit always saves** — abandoning a session mid-way calls finishSession() so all attempted questions and XP earned are preserved. Never discard partial session data.
 
 ---
 
@@ -756,11 +761,13 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 
 ✅ **Settings table — CREATED (June 2026).** `public.settings` table in Supabase holds `exam_date` and `default_session_questions`. `useSettings` hook reads all settings as key-value map. `CountdownBanner` is now self-contained — reads `exam_date` from Supabase, falls back to 2026-09-05.
 
+✅ **Role gate — FIXED (June 2026).** Parent sees ParentDashboard, student sees student dashboard, null profile shows error.
+
+✅ **RLS recursive policy bug — FIXED (June 2026).** Fixed via `is_parent_user()` SECURITY DEFINER function on all parent policies (profiles, mastery, sessions, attempts, weekly_plans, settings).
+
+✅ **Parent dashboard — FIXED (June 2026).** Rendering correctly with domain performance, curriculum coverage, Aarav's stats.
+
 ❌ **Weekly plan not displaying** — Dashboard Week Focus card not reading generated plan correctly.
-
-❌ **Parent dashboard** — currently shows student UI. Needs complete rebuild.
-
-❌ **Parent RLS policies** — parent cannot read Aarav's session/attempt/mastery data yet.
 
 ❌ **Session mode selection** — not built yet. Aarav/parent should choose before starting: full planned (40Q), single domain (20Q), single topic drill (15Q).
 

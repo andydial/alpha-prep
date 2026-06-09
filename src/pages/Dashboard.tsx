@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/useUser'
 import { useProgress } from '../hooks/useProgress'
 import { useWeeklyPlan } from '../hooks/useWeeklyPlan'
 import { supabase } from '../lib/supabase'
-import { getSessionDomainPair, DOMAIN_NAMES, getWeekNumber } from '../lib/curriculum'
-import type { Domain, DomainPair } from '../types'
+import { getWeekNumber } from '../lib/curriculum'
 import { generateWeeklyPlan } from '../lib/weeklyPlan'
 import { CountdownBanner } from '../components/CountdownBanner'
 import { ParentDashboard } from '../components/parent/ParentDashboard'
@@ -25,79 +24,6 @@ function SkeletonBlock({ className }: { className?: string }) {
   return <div className={`bg-gray-800 animate-pulse rounded-2xl ${className ?? ''}`} />
 }
 
-const EXAM_DOMAINS: Domain[] = ['maths', 'reading', 'verbal', 'abstract']
-
-const DOMAIN_COLOUR_BG: Record<Domain, string> = {
-  maths:    'border-blue-500/40 bg-blue-500/10 text-blue-300',
-  reading:  'border-purple-500/40 bg-purple-500/10 text-purple-300',
-  verbal:   'border-amber-500/40 bg-amber-500/10 text-amber-300',
-  abstract: 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300',
-  writing:  'border-green-500/40 bg-green-500/10 text-green-300',
-}
-
-interface SessionConfigPanelProps {
-  suggested: DomainPair
-  picked: DomainPair
-  onChange: (pair: DomainPair) => void
-  onConfirm: () => void
-  onCancel: () => void
-}
-
-function SessionConfigPanel({ suggested, picked, onChange, onConfirm, onCancel }: SessionConfigPanelProps) {
-  return (
-    <div className="bg-gray-900 border border-gray-700 rounded-2xl p-5 space-y-4">
-      <div>
-        <p className="text-white font-semibold text-sm mb-0.5">Session focus</p>
-        <p className="text-gray-400 text-xs">
-          Suggested: <span className="text-gray-300">{DOMAIN_NAMES[suggested[0]]} + {DOMAIN_NAMES[suggested[1]]}</span>
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {EXAM_DOMAINS.map(domain => {
-          const isSelected = picked.includes(domain)
-          return (
-            <button
-              key={domain}
-              onClick={() => {
-                if (isSelected) return
-                const [, d2] = picked
-                onChange([d2, domain])
-              }}
-              className={`
-                px-3 py-2.5 rounded-xl border text-sm font-medium text-left transition-all
-                ${isSelected
-                  ? DOMAIN_COLOUR_BG[domain]
-                  : 'border-gray-700 bg-gray-800/50 text-gray-500 hover:border-gray-600 hover:text-gray-400'
-                }
-              `}
-            >
-              {isSelected && (
-                <span className="text-[10px] font-bold uppercase tracking-wide block opacity-70 mb-0.5">
-                  {picked[0] === domain ? 'Stream 1' : 'Stream 2'}
-                </span>
-              )}
-              {DOMAIN_NAMES[domain]}
-            </button>
-          )
-        })}
-      </div>
-      <div className="flex gap-3 pt-1">
-        <button
-          onClick={onConfirm}
-          className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm transition-colors"
-        >
-          Start — {DOMAIN_NAMES[picked[0]]} + {DOMAIN_NAMES[picked[1]]}
-        </button>
-        <button
-          onClick={onCancel}
-          className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm transition-colors"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  )
-}
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -106,14 +32,8 @@ export function Dashboard() {
   const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
-  const [showSessionConfig, setShowSessionConfig] = useState(false)
-  const [pickedDomains, setPickedDomains] = useState<DomainPair | null>(null)
 
   const loading = userLoading || masteryLoading || planLoading
-
-  const suggestedPair = useMemo<DomainPair>(() => {
-    return getSessionDomainPair(mastery, plan ?? null, 0)
-  }, [mastery, plan])
 
   const weekNumber = getWeekNumber(EXAM_DATE)
 
@@ -139,13 +59,6 @@ export function Dashboard() {
   }, [user?.id])
 
   const isFirstTimeUser = !loading && mastery.length === 0
-
-  function handleStartSession() {
-    const pair = pickedDomains ?? suggestedPair
-    sessionStorage.setItem('sessionDomainPair', JSON.stringify(pair))
-    sessionStorage.removeItem('sessionTestMode')
-    navigate('/study')
-  }
 
   async function handleGeneratePlan() {
     if (!user?.id) return
@@ -259,22 +172,12 @@ export function Dashboard() {
       </div>
 
       {/* CTA */}
-      {showSessionConfig ? (
-        <SessionConfigPanel
-          suggested={suggestedPair}
-          picked={pickedDomains ?? suggestedPair}
-          onChange={setPickedDomains}
-          onConfirm={handleStartSession}
-          onCancel={() => setShowSessionConfig(false)}
-        />
-      ) : (
-        <button
-          onClick={() => { setPickedDomains(suggestedPair); setShowSessionConfig(true) }}
-          className="w-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl font-semibold text-lg py-4 transition-all duration-150"
-        >
-          {isFirstTimeUser ? 'Start First Session' : 'Start Session'}
-        </button>
-      )}
+      <button
+        onClick={() => navigate('/study')}
+        className="w-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white rounded-xl font-semibold text-lg py-4 transition-all duration-150"
+      >
+        {isFirstTimeUser ? 'Start First Session' : 'Start Session'}
+      </button>
 
 
       {/* Bottom padding */}

@@ -45,6 +45,7 @@ export function useStudySession(
   _plan: WeeklyPlan | null,
   domainPair: DomainPair,
   totalQuestions = 40,
+  forcedTopicId?: string,
 ) {
   const [state, setState] = useState<StudySessionState>({
     sessionId: null,
@@ -93,7 +94,7 @@ export function useStudySession(
       activeDomain,
     }))
 
-    topicId.current = selectTopicFromDomain(activeDomain, masteryRef.current)
+    topicId.current = forcedTopicId ?? selectTopicFromDomain(activeDomain, masteryRef.current)
     const topic = getTopicById(topicId.current)
     const weekNum = getWeekNumber(EXAM_DATE)
 
@@ -305,5 +306,5 @@ export function useStudySession(
     await fetchNextQuestion(streamBoundary.current + 1)
   }
 
-  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, QUESTIONS_PER_SESSION: totalQuestions }
+  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, finishSession, QUESTIONS_PER_SESSION: totalQuestions }
 }
