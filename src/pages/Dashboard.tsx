@@ -32,7 +32,6 @@ export function Dashboard() {
   const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
-  const [planGenError, setPlanGenError] = useState<string | null>(null)
   const generationAttempted = useRef(false)
 
   const loading = userLoading || masteryLoading || planLoading
@@ -42,15 +41,9 @@ export function Dashboard() {
     if (planLoading || masteryLoading || plan || !user?.id || profile?.role !== 'student' || generationAttempted.current) return
     generationAttempted.current = true
     setGeneratingPlan(true)
-    setPlanGenError(null)
     generateWeeklyPlan(user.id, mastery)
-      .then(result => { void refetchPlan() ; return result })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error
-          ? err.message
-          : (err !== null && typeof err === 'object' ? JSON.stringify(err) : String(err))
-        setPlanGenError(msg)
-      })
+      .then(() => { void refetchPlan() })
+      .catch((err: unknown) => { console.error('[Dashboard] plan generation failed:', err) })
       .finally(() => setGeneratingPlan(false))
   // mastery and refetchPlan are stable between renders; ref guard prevents re-runs
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,12 +146,6 @@ export function Dashboard() {
           <span className="text-indigo-400 text-sm">Generating your weekly plan…</span>
         </div>
       )}
-      {planGenError && (
-        <div className="bg-red-950/40 border border-red-700/50 rounded-xl px-4 py-3 text-xs text-red-400 break-all">
-          Plan error: {planGenError}
-        </div>
-      )}
-
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="This week" value={String(weekStats.questionsThisWeek)} unit="questions" />

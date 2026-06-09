@@ -155,6 +155,6 @@ export async function generateWeeklyPlan(
     return data as WeeklyPlan
   } catch (err) {
     console.error('Failed to generate weekly plan:', err)
-    throw err
+    return null
   }
 }
