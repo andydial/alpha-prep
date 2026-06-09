@@ -4,10 +4,11 @@ import { useUser } from '../hooks/useUser'
 import { useProgress } from '../hooks/useProgress'
 import { useWeeklyPlan } from '../hooks/useWeeklyPlan'
 import { supabase } from '../lib/supabase'
-import { getSessionDomainPair, DOMAIN_NAMES, getDaysUntilExam, getWeekNumber } from '../lib/curriculum'
+import { getSessionDomainPair, DOMAIN_NAMES, getWeekNumber } from '../lib/curriculum'
 import type { Domain, DomainPair } from '../types'
 import { generateWeeklyPlan } from '../lib/weeklyPlan'
 import { CountdownBanner } from '../components/CountdownBanner'
+import { ParentDashboard } from '../components/parent/ParentDashboard'
 import { LevelBadge } from '../components/LevelBadge'
 import { StreakCounter } from '../components/StreakCounter'
 import { FocusTodayCard } from '../components/FocusTodayCard'
@@ -114,7 +115,6 @@ export function Dashboard() {
     return getSessionDomainPair(mastery, plan ?? null, 0)
   }, [mastery, plan])
 
-  const daysLeft = getDaysUntilExam(EXAM_DATE)
   const weekNumber = getWeekNumber(EXAM_DATE)
 
   // Fetch week stats from sessions table
@@ -184,6 +184,25 @@ export function Dashboard() {
     )
   }
 
+  // Profile must be present and role must be known before rendering either dashboard.
+  // Never default silently — show an error if profile failed to load.
+  console.log('[Dashboard] profile.role =', profile?.role)
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
+        <div className="bg-gray-900 border border-red-500/30 rounded-2xl p-8 max-w-sm text-center space-y-3">
+          <p className="text-red-400 font-medium">Could not load your profile.</p>
+          <p className="text-gray-400 text-sm">Please sign out and sign back in.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (profile.role === 'parent') {
+    return <ParentDashboard parentProfile={profile} />
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 p-4 md:p-8 max-w-2xl mx-auto space-y-4">
       {/* Greeting */}
@@ -197,7 +216,7 @@ export function Dashboard() {
       </div>
 
       {/* Countdown */}
-      <CountdownBanner daysLeft={daysLeft} />
+      <CountdownBanner />
 
       {/* Level + Streak */}
       <div className="grid grid-cols-2 gap-4">

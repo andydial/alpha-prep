@@ -1,8 +1,19 @@
-interface CountdownBannerProps {
-  daysLeft: number
-}
+import { useSettings } from '../hooks/useSettings'
 
-export function CountdownBanner({ daysLeft }: CountdownBannerProps) {
+const FALLBACK_EXAM_DATE = new Date('2026-09-05')
+
+export function CountdownBanner() {
+  const { settings, loading } = useSettings()
+
+  if (loading) {
+    return <div className="bg-gray-800 animate-pulse rounded-2xl h-20" />
+  }
+
+  const examDate = settings.exam_date ? new Date(settings.exam_date) : FALLBACK_EXAM_DATE
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const daysLeft = Math.max(0, Math.round((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)))
+
   if (daysLeft === 0) {
     return (
       <div className="bg-gradient-to-r from-green-600 to-emerald-500 rounded-2xl p-6 text-center">

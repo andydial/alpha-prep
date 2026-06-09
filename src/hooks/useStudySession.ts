@@ -105,12 +105,14 @@ export function useStudySession(
         previousQuestions: previousQuestions.current,
         weekNumber: weekNum,
       })
+      console.log('[fetchNextQuestion] question generated Q#' + questionNum)
       previousQuestions.current.push(q.question.slice(0, 80))
       topicsUsed.current.add(q.topic_id)
       questionStartTime.current = Date.now()
       setState(prev => ({ ...prev, currentQuestion: q, loading: false }))
     } catch {
       const fallback = getFallbackQuestion(topicId.current)
+      console.log('[fetchNextQuestion] question generated (fallback) Q#' + questionNum)
       topicsUsed.current.add(fallback.topic_id)
       questionStartTime.current = Date.now()
       setState(prev => ({ ...prev, currentQuestion: fallback, loading: false }))
@@ -167,17 +169,6 @@ export function useStudySession(
     })
     currentDifficulty.current = getNextDifficulty(currentDifficulty.current, recentResults.current)
 
-    setState(prev => ({
-      ...prev,
-      answered: true,
-      isCorrect: correct,
-      xpEarned: xp,
-      showXPFlash: correct,
-      totalXP: totalXPRef.current,
-      correctCount: correctCountRef.current,
-    }))
-    if (correct) setTimeout(() => setState(prev => ({ ...prev, showXPFlash: false })), 1600)
-
     const baseAttempt = {
       session_id: sessionIdRef.current,
       student_id: user.id,
@@ -193,12 +184,30 @@ export function useStudySession(
       ai_explanation: currentQuestion.explanation,
       hint_used: state.hintUsed,
     }
-    let { error: attemptError } = await supabase.from('attempts').insert({ ...baseAttempt, xp_earned: xp })
-    if (attemptError?.code === '42703') {
-      // xp_earned column not yet migrated — insert without it
-      ;({ error: attemptError } = await supabase.from('attempts').insert(baseAttempt))
-    }
-    if (attemptError) console.error('[handleAnswer] attempt insert failed:', attemptError)
+
+    // Fire-and-forget: save attempt immediately on submit, before explanation renders.
+    // Never await — explanation must appear instantly. Errors are logged only.
+    void supabase.from('attempts').insert({ ...baseAttempt, xp_earned: xp }).then(({ error }) => {
+      if (!error) return
+      if (error.code === '42703') {
+        void supabase.from('attempts').insert(baseAttempt).then(({ error: e2 }) => {
+          if (e2) console.error('[handleAnswer] attempt insert failed:', e2)
+        })
+      } else {
+        console.error('[handleAnswer] attempt insert failed:', error)
+      }
+    })
+
+    setState(prev => ({
+      ...prev,
+      answered: true,
+      isCorrect: correct,
+      xpEarned: xp,
+      showXPFlash: correct,
+      totalXP: totalXPRef.current,
+      correctCount: correctCountRef.current,
+    }))
+    if (correct) setTimeout(() => setState(prev => ({ ...prev, showXPFlash: false })), 1600)
   }
 
   async function finishSession() {

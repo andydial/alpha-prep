@@ -99,6 +99,18 @@ VITE_ANTHROPIC_API_KEY=
 
 ---
 
+## Settings Table
+
+Key-value store in `public.settings`. Parent role can write, student role can read.
+
+Current keys:
+- `exam_date`: ISO date string (e.g. `'2026-09-05'`) — drives all countdowns and weekly plan pacing
+- `default_session_questions`: integer as string (e.g. `'40'`) — default questions per session
+
+Hook: `src/hooks/useSettings.ts` — returns `{ settings: Record<string, string>, loading: boolean }`
+
+---
+
 ## Supabase Database Schema
 
 Run these SQL statements in the Supabase SQL editor (Dashboard → SQL Editor → New Query):
@@ -738,19 +750,21 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 - ❌ Window focus/tab switch triggers new question generation (loses current question)
 - ❌ Weekly plan generates but doesn't display on dashboard
 
-### Known Bugs to Fix (in priority order)
+### Known Issues / Status
 
-**Bug 1 — Session not saving:**
-The full save flow needs debugging: session + attempts insert into Supabase on completion, dashboard useProgress hook refetches after save, ParentReport RLS policy added for parent role to read student data.
+✅ **Window focus bug — FIXED (June 2026).** `sessionStarted` ref guard in `useStudySession.ts` prevents re-triggering on tab switch or token refresh.
 
-**Bug 2 — Window focus generates new question:**
-Questions must only advance on explicit user action (submit answer / next button). Never regenerate on window visibility change or tab switch. Persist current question in component state.
+✅ **Settings table — CREATED (June 2026).** `public.settings` table in Supabase holds `exam_date` and `default_session_questions`. `useSettings` hook reads all settings as key-value map. `CountdownBanner` is now self-contained — reads `exam_date` from Supabase, falls back to 2026-09-05.
 
-**Bug 3 — Weekly plan not displaying:**
-Dashboard Week Focus card not reading generated plan from Supabase. Fix fetch/display logic.
+❌ **Weekly plan not displaying** — Dashboard Week Focus card not reading generated plan correctly.
 
-**Bug 4 — Domain blocks not strict:**
-Block 1 (Q1-8) must be exclusively Domain 1. Block 2 (Q9-15) exclusively Domain 2. Add full-screen transition card between blocks.
+❌ **Parent dashboard** — currently shows student UI. Needs complete rebuild.
+
+❌ **Parent RLS policies** — parent cannot read Aarav's session/attempt/mastery data yet.
+
+❌ **Session mode selection** — not built yet. Aarav/parent should choose before starting: full planned (40Q), single domain (20Q), single topic drill (15Q).
+
+❌ **Domain blocks not strict** — Q1-20 must be Domain 1 only, Q21-40 Domain 2 only.
 
 ### RLS Policy Needed for Parent Report
 Run this in Supabase SQL editor to allow parent account to read Aarav's data:
