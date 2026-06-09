@@ -5,6 +5,7 @@ import { Results } from './pages/Results'
 import { Dashboard } from './pages/Dashboard'
 import { Progress } from './pages/Progress'
 import { ParentReport } from './pages/ParentReport'
+import { Settings } from './pages/Settings'
 import { AuthGuard } from './components/AuthGuard'
 import { NavBar } from './components/NavBar'
 
@@ -68,6 +69,14 @@ export default function App() {
           element={
             <AuthGuard requireRole="parent">
               <AuthLayout><ParentReport /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <AuthGuard requireRole="parent">
+              <AuthLayout><Settings /></AuthLayout>
             </AuthGuard>
           }
         />

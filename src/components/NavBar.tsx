@@ -65,7 +65,10 @@ export function NavBar() {
             </>
           )}
           {profile?.role === 'parent' && (
-            <NavItem to="/report" label="Report" />
+            <>
+              <NavItem to="/report" label="Report" />
+              <NavItem to="/settings" label="Settings" />
+            </>
           )}
         </div>
 
@@ -118,7 +121,10 @@ export function NavBar() {
             </>
           )}
           {profile?.role === 'parent' && (
-            <NavItem to="/report" label="Report" onClick={() => setMenuOpen(false)} />
+            <>
+              <NavItem to="/report" label="Report" onClick={() => setMenuOpen(false)} />
+              <NavItem to="/settings" label="Settings" onClick={() => setMenuOpen(false)} />
+            </>
           )}
           {profile && (
             <div className="pt-2 border-t border-gray-800 flex items-center justify-between">
