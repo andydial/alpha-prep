@@ -147,12 +147,6 @@ export function Dashboard() {
     navigate('/study')
   }
 
-  function handleTestSession() {
-    sessionStorage.setItem('sessionDomainPair', JSON.stringify(['maths', 'verbal']))
-    sessionStorage.setItem('sessionTestMode', '3')
-    navigate('/study')
-  }
-
   async function handleGeneratePlan() {
     if (!user?.id) return
     setGeneratingPlan(true)
@@ -282,15 +276,6 @@ export function Dashboard() {
         </button>
       )}
 
-      {/* Parent-only test shortcut */}
-      {profile?.role === 'parent' && (
-        <button
-          onClick={handleTestSession}
-          className="w-full py-2 border border-dashed border-amber-700/50 text-amber-700/70 hover:border-amber-600 hover:text-amber-600 rounded-xl text-xs font-medium transition-colors"
-        >
-          🧪 Test: Run 3Q Mini Session
-        </button>
-      )}
 
       {/* Bottom padding */}
       <div className="h-4" />
