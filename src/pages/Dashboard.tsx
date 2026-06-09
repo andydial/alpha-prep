@@ -166,6 +166,24 @@ export function Dashboard() {
       </button>
 
 
+      {/* Squad + Store */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => navigate('/squad')}
+          className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-xl font-semibold py-3.5 text-sm transition-colors flex flex-col items-center gap-1"
+        >
+          <span className="text-xl">⚽</span>
+          My Squad
+        </button>
+        <button
+          onClick={() => navigate('/store')}
+          className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-xl font-semibold py-3.5 text-sm transition-colors flex flex-col items-center gap-1"
+        >
+          <span className="text-xl">🏪</span>
+          Card Store
+        </button>
+      </div>
+
       {/* Bottom padding */}
       <div className="h-4" />
     </div>

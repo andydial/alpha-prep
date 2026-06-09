@@ -6,6 +6,8 @@ import { Dashboard } from './pages/Dashboard'
 import { Progress } from './pages/Progress'
 import { ParentReport } from './pages/ParentReport'
 import { Settings } from './pages/Settings'
+import { Store } from './pages/Store'
+import { Squad } from './pages/Squad'
 import { AuthGuard } from './components/AuthGuard'
 import { NavBar } from './components/NavBar'
 
@@ -77,6 +79,22 @@ export default function App() {
           element={
             <AuthGuard requireRole="parent">
               <AuthLayout><Settings /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/store"
+          element={
+            <AuthGuard requireRole="student">
+              <AuthLayout><Store /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/squad"
+          element={
+            <AuthGuard requireRole="student">
+              <AuthLayout><Squad /></AuthLayout>
             </AuthGuard>
           }
         />

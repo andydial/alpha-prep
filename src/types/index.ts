@@ -113,6 +113,32 @@ export interface LevelInfo {
   xpRequired: number
 }
 
+export type CardTier = 'bronze' | 'silver' | 'gold' | 'elite' | 'legend'
+
+export interface PlayerCard {
+  id: string
+  name: string
+  rating: number
+  tier: CardTier
+  pace: number | null
+  shooting: number | null
+  passing: number | null
+  dribbling: number | null
+  defending: number | null
+  physical: number | null
+  xp_cost: number
+  active: boolean
+}
+
+export interface StudentCard {
+  id: string
+  student_id: string
+  card_id: string
+  purchased_at: string
+  xp_spent: number
+  player_cards?: PlayerCard
+}
+
 export type SessionMode = 'planned' | 'domain' | 'topic'
 
 export interface SessionConfig {
