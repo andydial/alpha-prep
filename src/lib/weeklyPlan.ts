@@ -13,6 +13,20 @@ interface PlanPayload {
   domainRotation: [string, string][]
 }
 
+const VALID_TOPIC_IDS = new Set(TOPICS.map(t => t.id))
+
+function pickFallbackTopics(
+  masteryScores: { topicId: string; score: number }[]
+): { primaryTopicId: string; secondaryTopicId: string } {
+  const sorted = [...masteryScores].sort((a, b) => a.score - b.score)
+  const primary = sorted[0]
+  const primaryDomain = TOPICS.find(t => t.id === primary.topicId)?.domain
+  const secondary =
+    sorted.find(m => TOPICS.find(t => t.id === m.topicId)?.domain !== primaryDomain) ??
+    sorted[1]
+  return { primaryTopicId: primary.topicId, secondaryTopicId: secondary.topicId }
+}
+
 async function callAnthropicForPlan(
   weekNumber: number,
   masteryScores: { topicId: string; topicName: string; score: number }[]
@@ -23,7 +37,7 @@ async function callAnthropicForPlan(
   const prompt = `You are planning Week ${weekNumber} of 8 for Aarav's EDSC Alpha exam preparation.
 
 Current mastery scores (0-100%):
-${masteryScores.map(m => `- ${m.topicName}: ${Math.round(m.score * 100)}%`).join('\n')}
+${masteryScores.map(m => `- ${m.topicId} (${m.topicName}): ${Math.round(m.score * 100)}%`).join('\n')}
 
 Choose 2 focus topics for this week AND provide a 5-session domain rotation that guarantees all 4 exam domains (maths, reading, verbal, abstract) are touched across the week.
 
@@ -38,8 +52,8 @@ Exam domain guidance:
 
 Respond with JSON only — no markdown, no preamble:
 {
-  "primaryTopicId": "exact topic id from the list above",
-  "secondaryTopicId": "different exact topic id from the list above",
+  "primaryTopicId": "must be exactly one of the topic IDs listed above (e.g. maths_fractions)",
+  "secondaryTopicId": "must be exactly one of the topic IDs listed above, different from primaryTopicId",
   "themeDescription": "one sentence — e.g. Fractions mastery + Verbal analogies",
   "dailyGoal": 15,
   "rationale": "2-3 sentences explaining why these topics and this rotation this week based on the mastery data",
@@ -74,9 +88,21 @@ Respond with JSON only — no markdown, no preamble:
 
   const data = await response.json() as { content: { type: string; text: string }[] }
   const text = data.content.find(c => c.type === 'text')?.text ?? '{}'
-  // Strip markdown fences if present
   const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
-  return JSON.parse(cleaned) as PlanPayload
+  const parsed = JSON.parse(cleaned) as PlanPayload
+
+  // Validate both IDs against the known topic list before they reach the FK constraint
+  const primaryValid = VALID_TOPIC_IDS.has(parsed.primaryTopicId)
+  const secondaryValid = VALID_TOPIC_IDS.has(parsed.secondaryTopicId)
+  if (!primaryValid || !secondaryValid) {
+    if (!primaryValid) console.error('[weeklyPlan] AI returned invalid primaryTopicId:', parsed.primaryTopicId)
+    if (!secondaryValid) console.error('[weeklyPlan] AI returned invalid secondaryTopicId:', parsed.secondaryTopicId)
+    const fallback = pickFallbackTopics(masteryScores)
+    if (!primaryValid) parsed.primaryTopicId = fallback.primaryTopicId
+    if (!secondaryValid) parsed.secondaryTopicId = fallback.secondaryTopicId
+  }
+
+  return parsed
 }
 
 export async function generateWeeklyPlan(
@@ -85,10 +111,9 @@ export async function generateWeeklyPlan(
 ): Promise<WeeklyPlan | null> {
   const weekNumber = getWeekNumber(EXAM_DATE)
 
-  // Monday of current week
   const today = new Date()
   const monday = new Date(today)
-  const dayOfWeek = today.getDay() // 0 = Sunday
+  const dayOfWeek = today.getDay()
   const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
   monday.setDate(today.getDate() + daysToMonday)
   const weekStart = monday.toISOString().split('T')[0]
@@ -119,7 +144,6 @@ export async function generateWeeklyPlan(
       .single()
 
     if (error?.code === '42703') {
-      // domain_rotation column not yet migrated — insert without it
       ;({ data, error } = await supabase
         .from('weekly_plans')
         .insert(baseRow)
