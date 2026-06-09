@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useProgress } from '../../hooks/useProgress'
 import { useWeeklyPlan } from '../../hooks/useWeeklyPlan'
-import { generateWeeklyPlan } from '../../lib/weeklyPlan'
 import { getLevelForXP, getTopicById } from '../../lib/curriculum'
 import { CountdownBanner } from '../CountdownBanner'
 import { DomainPerformanceGrid } from './DomainPerformanceGrid'
@@ -20,10 +19,9 @@ interface ParentDashboardProps {
 export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
   const [studentProfile, setStudentProfile] = useState<Profile | null>(null)
   const [recentSessions, setRecentSessions] = useState<Session[]>([])
-  const [generatingPlan, setGeneratingPlan] = useState(false)
 
   const { mastery } = useProgress(STUDENT_ID)
-  const { plan, refetch: refetchPlan } = useWeeklyPlan(STUDENT_ID)
+  const { plan } = useWeeklyPlan(STUDENT_ID)
 
   useEffect(() => {
     async function load() {
@@ -42,18 +40,6 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
     }
     void load()
   }, [])
-
-  async function handleRegeneratePlan() {
-    setGeneratingPlan(true)
-    try {
-      await generateWeeklyPlan(STUDENT_ID, mastery)
-      await refetchPlan()
-    } catch (err) {
-      console.error('[ParentDashboard] regenerate plan failed:', err)
-    } finally {
-      setGeneratingPlan(false)
-    }
-  }
 
   const levelInfo = getLevelForXP(studentProfile?.xp_total ?? 0)
   const primaryTopic = plan?.primary_topic_id ? getTopicById(plan.primary_topic_id)?.name : null
@@ -105,16 +91,7 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
 
       {/* 6. Weekly plan */}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-white font-semibold">This Week's Plan</p>
-          <button
-            onClick={handleRegeneratePlan}
-            disabled={generatingPlan}
-            className="text-xs px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
-          >
-            {generatingPlan ? 'Generating…' : 'Regenerate Plan'}
-          </button>
-        </div>
+        <p className="text-white font-semibold">This Week's Plan</p>
         {plan ? (
           <div className="space-y-2">
             {primaryTopic && secondaryTopic && (
@@ -131,7 +108,7 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
           </div>
         ) : (
           <p className="text-gray-500 text-sm">
-            No plan for this week — click Regenerate to create one.
+            No plan for this week yet — it will appear after Aarav's first login of the week.
           </p>
         )}
       </div>

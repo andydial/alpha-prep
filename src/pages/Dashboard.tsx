@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/useUser'
 import { useProgress } from '../hooks/useProgress'
@@ -32,8 +32,24 @@ export function Dashboard() {
   const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
+  const generationAttempted = useRef(false)
 
   const loading = userLoading || masteryLoading || planLoading
+
+  // Auto-generate this week's plan on first login of the week when none exists
+  useEffect(() => {
+    if (planLoading || masteryLoading || plan || !user?.id || generationAttempted.current) return
+    generationAttempted.current = true
+    setGeneratingPlan(true)
+    void generateWeeklyPlan(user.id, mastery)
+      .then(result => {
+        if (result) void refetchPlan()
+        else console.error('[Dashboard] weekly plan auto-generation failed')
+      })
+      .finally(() => setGeneratingPlan(false))
+  // mastery and refetchPlan are stable between renders; ref guard prevents re-runs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planLoading, masteryLoading, plan, user?.id])
 
   const weekNumber = getWeekNumber(EXAM_DATE)
 
@@ -59,23 +75,6 @@ export function Dashboard() {
   }, [user?.id])
 
   const isFirstTimeUser = !loading && mastery.length === 0
-
-  async function handleGeneratePlan() {
-    if (!user?.id) return
-    setGeneratingPlan(true)
-    try {
-      const result = await generateWeeklyPlan(user.id, mastery)
-      if (result) {
-        await refetchPlan()
-      } else {
-        console.error('[handleGeneratePlan] generation returned null — check Supabase logs for insert error')
-      }
-    } catch (err) {
-      console.error('[handleGeneratePlan] failed:', err)
-    } finally {
-      setGeneratingPlan(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -143,21 +142,11 @@ export function Dashboard() {
 
       {/* Weekly Theme */}
       <WeeklyThemeCard plan={plan} weekNumber={weekNumber} />
-      {!plan && !planLoading && (
-        <button
-          onClick={handleGeneratePlan}
-          disabled={generatingPlan}
-          className="w-full bg-indigo-700 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-sm py-3 transition-all duration-150 flex items-center justify-center gap-2"
-        >
-          {generatingPlan ? (
-            <>
-              <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-              Generating your plan…
-            </>
-          ) : (
-            'Generate This Week\'s Plan'
-          )}
-        </button>
+      {generatingPlan && (
+        <div className="flex items-center justify-center gap-2 py-2">
+          <span className="h-3.5 w-3.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+          <span className="text-indigo-400 text-sm">Generating your weekly plan…</span>
+        </div>
       )}
 
       {/* Stats row */}
