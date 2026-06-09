@@ -25,7 +25,10 @@ export function useUser(): UseUserResult {
   }
 
   useEffect(() => {
+    let currentUserId: string | null = null
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      currentUserId = session?.user?.id ?? null
       setUser(session?.user ?? null)
       if (session?.user) {
         void fetchProfile(session.user.id)
@@ -35,6 +38,7 @@ export function useUser(): UseUserResult {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      currentUserId = session?.user?.id ?? null
       setUser(session?.user ?? null)
       if (session?.user) {
         void fetchProfile(session.user.id)
@@ -44,7 +48,19 @@ export function useUser(): UseUserResult {
       }
     })
 
-    return () => subscription.unsubscribe()
+    // Re-fetch profile when the tab regains focus so XP/level/streak
+    // stay current after returning from a completed session.
+    function handleVisibility() {
+      if (document.visibilityState === 'visible' && currentUserId) {
+        void fetchProfile(currentUserId)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   return { user, profile, loading }

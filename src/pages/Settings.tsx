@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../hooks/useSettings'
+import { hashPIN, isPinConfigured, saveQuickSignIn } from '../lib/pinLogin'
 
 // TODO: multi-child — replace with dynamic child lookup
 const STUDENT_ID = 'bcf5c2fb-1d99-4d1e-9da8-4cc73d4c297f'
@@ -11,14 +12,6 @@ async function saveSetting(key: string, value: string): Promise<boolean> {
     .from('settings')
     .upsert({ key, value }, { onConflict: 'key' })
   return !error
-}
-
-async function hashPIN(pin: string): Promise<string> {
-  const data = new TextEncoder().encode(`alpha-prep-pin:${pin}`)
-  const hash = await crypto.subtle.digest('SHA-256', data)
-  return Array.from(new Uint8Array(hash))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
 }
 
 type SaveState = 'idle' | 'saving' | 'saved'
@@ -39,6 +32,8 @@ export function Settings() {
   const [hasPIN, setHasPIN] = useState(false)
   const [pin1, setPin1] = useState('')
   const [pin2, setPin2] = useState('')
+  const [studentPw, setStudentPw] = useState('')
+  const [qsiConfigured, setQsiConfigured] = useState(false)
   const [pinSave, setPinSave] = useState<SaveState>('idle')
   const [pinError, setPinError] = useState('')
 
@@ -56,6 +51,7 @@ export function Settings() {
       .eq('id', STUDENT_ID)
       .single()
       .then(({ data }) => setHasPIN(!!data?.pin_hash))
+    setQsiConfigured(isPinConfigured())
   }, [])
 
   async function handleSaveExamDate() {
@@ -79,6 +75,10 @@ export function Settings() {
     setPinError('')
     if (!/^\d{4}$/.test(pin1)) { setPinError('PIN must be exactly 4 digits'); return }
     if (pin1 !== pin2) { setPinError('PINs do not match'); return }
+    if (!studentPw && !qsiConfigured) {
+      setPinError("Enter Aarav's current password so Quick Sign-in works on this device")
+      return
+    }
     setPinSave('saving')
     const hash = await hashPIN(pin1)
     const { error } = await supabase
@@ -86,9 +86,14 @@ export function Settings() {
       .update({ pin_hash: hash })
       .eq('id', STUDENT_ID)
     if (error) { setPinSave('idle'); setPinError('Failed to save PIN'); return }
+    if (studentPw) {
+      saveQuickSignIn(STUDENT_EMAIL, studentPw, hash)
+      setQsiConfigured(true)
+    }
     setHasPIN(true)
     setPin1('')
     setPin2('')
+    setStudentPw('')
     setPinSave('saved')
     setTimeout(() => setPinSave('idle'), 2000)
   }
@@ -169,7 +174,7 @@ export function Settings() {
           <h2 className="text-white font-semibold">Aarav's Login PIN</h2>
           <p className="text-gray-500 text-xs mt-1">
             {hasPIN
-              ? 'PIN is set — Aarav can log in with his 4-digit PIN instead of password.'
+              ? `PIN is set · Quick Sign-in ${qsiConfigured ? 'active on this device' : 'not set up on this device — enter password below'}.`
               : 'No PIN set — Aarav must use email + password to log in.'}
           </p>
         </div>
@@ -197,6 +202,21 @@ export function Settings() {
               placeholder="••••"
               className="w-32 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-lg tracking-widest text-center focus:outline-none focus:border-blue-500 transition-colors"
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-gray-400 text-sm block">
+              Aarav's password{qsiConfigured ? ' (leave blank to keep existing)' : ''}
+            </label>
+            <input
+              type="password"
+              value={studentPw}
+              onChange={e => { setStudentPw(e.target.value); setPinError('') }}
+              placeholder={qsiConfigured ? '(unchanged)' : "Aarav's current password"}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
+            />
+            <p className="text-gray-600 text-xs">
+              Stored locally on this device so Aarav can sign in with just his PIN.
+            </p>
           </div>
           {pinError && <p className="text-red-400 text-xs">{pinError}</p>}
         </div>
