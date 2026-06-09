@@ -32,6 +32,7 @@ export function Dashboard() {
   const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
+  const [planGenError, setPlanGenError] = useState<string | null>(null)
   const generationAttempted = useRef(false)
 
   const loading = userLoading || masteryLoading || planLoading
@@ -41,10 +42,12 @@ export function Dashboard() {
     if (planLoading || masteryLoading || plan || !user?.id || profile?.role !== 'student' || generationAttempted.current) return
     generationAttempted.current = true
     setGeneratingPlan(true)
-    void generateWeeklyPlan(user.id, mastery)
-      .then(result => {
-        if (result) void refetchPlan()
-        else console.error('[Dashboard] weekly plan auto-generation failed')
+    setPlanGenError(null)
+    generateWeeklyPlan(user.id, mastery)
+      .then(result => { void refetchPlan() ; return result })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        setPlanGenError(msg)
       })
       .finally(() => setGeneratingPlan(false))
   // mastery and refetchPlan are stable between renders; ref guard prevents re-runs
@@ -146,6 +149,11 @@ export function Dashboard() {
         <div className="flex items-center justify-center gap-2 py-2">
           <span className="h-3.5 w-3.5 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
           <span className="text-indigo-400 text-sm">Generating your weekly plan…</span>
+        </div>
+      )}
+      {planGenError && (
+        <div className="bg-red-950/40 border border-red-700/50 rounded-xl px-4 py-3 text-xs text-red-400 break-all">
+          Plan error: {planGenError}
         </div>
       )}
 
