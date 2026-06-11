@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { generateQuestion } from '../lib/anthropic'
+import { generateQuestion, evaluateAnswer } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
 import {
   getTopicById,
@@ -26,6 +26,8 @@ export interface StudySessionState {
   sessionId: string | null
   currentQuestion: Question | null
   answered: boolean
+  evaluating: boolean
+  aiFeedback: string
   isCorrect: boolean
   xpEarned: number
   hintUsed: boolean
@@ -51,6 +53,8 @@ export function useStudySession(
     sessionId: null,
     currentQuestion: null,
     answered: false,
+    evaluating: false,
+    aiFeedback: '',
     isCorrect: false,
     xpEarned: 0,
     hintUsed: false,
@@ -79,6 +83,7 @@ export function useStudySession(
   const totalXPRef = useRef(0)
   const allAttempts = useRef<{ topicId: string; isCorrect: boolean; difficulty: number; timeTaken: number }[]>([])
   const streamBoundary = useRef(20) // questions 1-20 = block 1; 21-40 = block 2
+  const difficultyOffset = useRef(0) // parent-configurable offset from settings table
 
   const fetchNextQuestion = useCallback(async (questionNum: number) => {
     // Determine which stream domain based on question number
@@ -90,6 +95,8 @@ export function useStudySession(
       ...prev,
       loading: true,
       answered: false,
+      evaluating: false,
+      aiFeedback: '',
       hintUsed: false,
       activeDomain,
     }))
@@ -99,10 +106,11 @@ export function useStudySession(
     const weekNum = getWeekNumber(EXAM_DATE)
 
     try {
+      const clampedDifficulty = Math.max(5, Math.min(10, currentDifficulty.current + difficultyOffset.current))
       const q = await generateQuestion({
         topicId: topicId.current,
         topicName: topic?.name ?? topicId.current,
-        difficulty: currentDifficulty.current,
+        difficulty: clampedDifficulty,
         previousQuestions: previousQuestions.current,
         weekNumber: weekNum,
       })
@@ -125,8 +133,12 @@ export function useStudySession(
     if (!user) return
     sessionStarted.current = true
     try {
-      const { data: mastery } = await supabase.from('mastery').select('*').eq('student_id', user.id)
+      const [{ data: mastery }, { data: offsetData }] = await Promise.all([
+        supabase.from('mastery').select('*').eq('student_id', user.id),
+        supabase.from('settings').select('value').eq('key', 'difficulty_offset').single(),
+      ])
       masteryRef.current = mastery ?? []
+      difficultyOffset.current = parseInt(offsetData?.value ?? '0', 10) || 0
 
       // Initialise difficulty from first domain's representative topic
       const firstTopic = getTopicById(selectTopicFromDomain(domainPair[0], mastery ?? []))
@@ -155,8 +167,29 @@ export function useStudySession(
 
   async function handleAnswer(studentAnswer: string, currentQuestion: Question) {
     if (!user) return
-    const correct = checkAnswer(studentAnswer, currentQuestion.correct_answer)
-    const xp = calculateXP(correct, currentQuestion.difficulty, state.hintUsed)
+    const hintUsed = state.hintUsed
+
+    let correct: boolean
+    let aiFeedback = ''
+
+    if (currentQuestion.type === 'multiple_choice') {
+      // MC: instant string match — no API call needed
+      correct = checkAnswer(studentAnswer, currentQuestion.correct_answer)
+    } else {
+      // short_answer / numeric: AI evaluation accepts equivalent forms
+      setState(prev => ({ ...prev, evaluating: true }))
+      const topicName = getTopicById(currentQuestion.topic_id)?.name ?? currentQuestion.topic_id
+      const result = await evaluateAnswer({
+        question: currentQuestion.question,
+        correctAnswer: currentQuestion.correct_answer,
+        studentAnswer,
+        topicName,
+      })
+      correct = result.correct
+      aiFeedback = result.feedback
+    }
+
+    const xp = calculateXP(correct, currentQuestion.difficulty, hintUsed)
 
     const timeTaken = Math.round((Date.now() - questionStartTime.current) / 1000)
     if (correct) correctCountRef.current += 1
@@ -183,7 +216,7 @@ export function useStudySession(
       difficulty: currentQuestion.difficulty,
       time_seconds: timeTaken,
       ai_explanation: currentQuestion.explanation,
-      hint_used: state.hintUsed,
+      hint_used: hintUsed,
     }
 
     // Fire-and-forget: save attempt immediately on submit, before explanation renders.
@@ -202,6 +235,8 @@ export function useStudySession(
     setState(prev => ({
       ...prev,
       answered: true,
+      evaluating: false,
+      aiFeedback,
       isCorrect: correct,
       xpEarned: xp,
       showXPFlash: correct,

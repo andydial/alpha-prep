@@ -45,11 +45,14 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
 
   const canStart =
     mode === 'planned' ||
+    mode === 'quick' ||
     (mode === 'domain' && selectedDomain !== null) ||
     (mode === 'topic' && selectedTopicId !== null)
 
   function handleConfirm() {
-    if (mode === 'planned') {
+    if (mode === 'quick') {
+      onConfirm({ mode: 'planned', domainPair: plannedPair, totalQuestions: 10 })
+    } else if (mode === 'planned') {
       onConfirm({ mode: 'planned', domainPair: plannedPair, totalQuestions: plannedQuestions })
     } else if (mode === 'domain' && selectedDomain) {
       onConfirm({ mode: 'domain', domainPair: [selectedDomain, selectedDomain], totalQuestions: 20 })
@@ -66,6 +69,7 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
   }
 
   const startLabel = (() => {
+    if (mode === 'quick') return 'Start — Quick 10 Questions'
     if (mode === 'planned') return `Start — ${plannedQuestions} Questions`
     if (mode === 'domain') return selectedDomain ? `Start — ${DOMAIN_NAMES[selectedDomain]}` : 'Select a subject'
     return selectedTopicId ? `Start — ${getTopicById(selectedTopicId)?.name ?? 'Topic'}` : 'Select a topic'
@@ -90,6 +94,15 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
 
       {/* Mode cards */}
       <div className="space-y-3">
+
+          {/* Quick Session */}
+        <ModeCard
+          selected={mode === 'quick'}
+          onClick={() => selectMode('quick')}
+          label="Quick Session"
+          subtext="Fast 10-question review — ideal when time is short"
+          badge="10 questions"
+        />
 
         {/* Planned Session */}
         <ModeCard

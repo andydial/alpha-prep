@@ -139,7 +139,7 @@ export interface StudentCard {
   player_cards?: PlayerCard
 }
 
-export type SessionMode = 'planned' | 'domain' | 'topic'
+export type SessionMode = 'planned' | 'quick' | 'domain' | 'topic'
 
 export interface SessionConfig {
   mode: SessionMode

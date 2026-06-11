@@ -28,6 +28,10 @@ export function Settings() {
   const [writingOn, setWritingOn] = useState(false)
   const [sessionSave, setSessionSave] = useState<SaveState>('idle')
 
+  // Difficulty offset
+  const [diffOffset, setDiffOffset] = useState(0)
+  const [diffSave, setDiffSave] = useState<SaveState>('idle')
+
   // PIN
   const [hasPIN, setHasPIN] = useState(false)
   const [pin1, setPin1] = useState('')
@@ -42,6 +46,7 @@ export function Settings() {
     setExamDate(settings.exam_date ?? '2026-09-05')
     setDefaultQ(settings.default_session_questions ?? '40')
     setWritingOn(settings.writing_enabled === 'true')
+    setDiffOffset(parseInt(settings.difficulty_offset ?? '0', 10) || 0)
   }, [loading, settings])
 
   useEffect(() => {
@@ -69,6 +74,13 @@ export function Settings() {
     ])
     setSessionSave(a && b ? 'saved' : 'idle')
     if (a && b) setTimeout(() => setSessionSave('idle'), 2000)
+  }
+
+  async function handleSaveDifficulty() {
+    setDiffSave('saving')
+    const ok = await saveSetting('difficulty_offset', String(diffOffset))
+    setDiffSave(ok ? 'saved' : 'idle')
+    if (ok) setTimeout(() => setDiffSave('idle'), 2000)
   }
 
   async function handleSavePIN() {
@@ -130,7 +142,7 @@ export function Settings() {
         <div className="space-y-1.5">
           <label className="text-gray-400 text-sm block">Default session length (Planned Sessions)</label>
           <div className="grid grid-cols-4 gap-2">
-            {(['15', '20', '30', '40'] as const).map(n => (
+            {(['10', '15', '20', '30', '40'] as const).map(n => (
               <button
                 key={n}
                 onClick={() => { setDefaultQ(n); setSessionSave('idle') }}
@@ -166,6 +178,51 @@ export function Settings() {
         </div>
 
         <SaveButton state={sessionSave} onClick={handleSaveSession} />
+      </section>
+
+      {/* Difficulty Offset */}
+      <section className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div>
+          <h2 className="text-white font-semibold">Question Difficulty</h2>
+          <p className="text-gray-500 text-xs mt-1">
+            Adjusts how hard questions are for Aarav. Takes effect at the start of the next session.
+          </p>
+        </div>
+        <div className="space-y-3">
+          {(() => {
+            const LABELS = ['Much easier', 'Easier', 'Normal', 'Harder', 'Maximum challenge']
+            const DESCRIPTIONS = [
+              'Difficulty 4–6 · good for consolidation',
+              'Difficulty 5–7 · slightly below default',
+              'Difficulty 6–8 · default for Aarav',
+              'Difficulty 7–9 · above typical level',
+              'Difficulty 8–10 · elite challenge',
+            ]
+            return (
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => { setDiffOffset(Math.max(-2, diffOffset - 1)); setDiffSave('idle') }}
+                  disabled={diffOffset <= -2}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white text-lg font-bold transition-colors"
+                >
+                  −
+                </button>
+                <div className="flex-1 text-center">
+                  <p className="text-white font-semibold">{LABELS[diffOffset + 2]}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{DESCRIPTIONS[diffOffset + 2]}</p>
+                </div>
+                <button
+                  onClick={() => { setDiffOffset(Math.min(2, diffOffset + 1)); setDiffSave('idle') }}
+                  disabled={diffOffset >= 2}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white text-lg font-bold transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            )
+          })()}
+        </div>
+        <SaveButton state={diffSave} onClick={handleSaveDifficulty} />
       </section>
 
       {/* Aarav's PIN */}

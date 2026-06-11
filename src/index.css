@@ -5,4 +5,19 @@
   --color-brand-amber: #f59e0b;
   --color-brand-red: #ef4444;
   --color-brand-blue: #3b82f6;
+  --animate-shake: shake 0.4s ease-in-out;
+  --animate-pop-in: pop-in 0.25s ease-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-7px); }
+  40%       { transform: translateX(7px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+
+@keyframes pop-in {
+  0%   { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
 }

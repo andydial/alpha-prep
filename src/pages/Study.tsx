@@ -29,7 +29,7 @@ export function Study() {
   } = useStudySession(user, null, domainPair, totalQuestions, forcedTopicId)
 
   const {
-    currentQuestion, answered, isCorrect, xpEarned,
+    currentQuestion, answered, evaluating, aiFeedback, isCorrect, xpEarned,
     hintUsed, showXPFlash, questionNumber, loading, error,
     showStreamTransition,
   } = state
@@ -117,10 +117,15 @@ export function Study() {
                   questionNumber={questionNumber}
                   totalQuestions={QUESTIONS_PER_SESSION}
                 />
-                {!answered ? (
+                {evaluating ? (
+                  <div className="flex items-center justify-center gap-3 py-10 text-gray-400">
+                    <Loader2 size={20} className="animate-spin text-blue-400" />
+                    <span className="text-sm">Checking your answer…</span>
+                  </div>
+                ) : !answered ? (
                   <AnswerInput
                     question={currentQuestion!}
-                    onSubmit={(answer) => handleAnswer(answer, currentQuestion!)}
+                    onSubmit={(answer) => { void handleAnswer(answer, currentQuestion!) }}
                     disabled={answered}
                     hintUsed={hintUsed}
                     onHintRequest={setHintUsed}
@@ -129,7 +134,7 @@ export function Study() {
                   <ExplanationPanel
                     isCorrect={isCorrect}
                     correctAnswer={currentQuestion!.correct_answer}
-                    explanation={currentQuestion!.explanation}
+                    explanation={aiFeedback || currentQuestion!.explanation}
                     hintUsed={hintUsed}
                     xpEarned={xpEarned}
                     onNext={onNext}

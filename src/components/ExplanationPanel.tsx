@@ -17,12 +17,15 @@ export function ExplanationPanel({
   xpEarned,
   onNext,
 }: ExplanationPanelProps) {
+  const ENCOURAGEMENTS = ['Nice work!', 'Correct!', 'Nailed it!', 'Well done!', 'Spot on!']
+  const encouragement = ENCOURAGEMENTS[Math.floor(Date.now() / 1000) % ENCOURAGEMENTS.length]
+
   return (
     <div
-      className={`border rounded-2xl p-6 space-y-4 ${
+      className={`border rounded-2xl p-6 space-y-4 animate-pop-in ${
         isCorrect
           ? 'bg-green-500/10 border-green-500/30'
-          : 'bg-amber-500/10 border-amber-500/30'
+          : 'bg-amber-500/10 border-amber-500/30 animate-shake'
       }`}
     >
       {/* Result header */}
@@ -38,7 +41,7 @@ export function ExplanationPanel({
               isCorrect ? 'text-green-400' : 'text-amber-400'
             }`}
           >
-            {isCorrect ? 'Correct!' : 'Not quite'}
+            {isCorrect ? encouragement : 'Not quite'}
           </span>
         </div>
 

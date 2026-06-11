@@ -112,6 +112,62 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
   throw lastError ?? new Error('Failed to generate question after 2 attempts')
 }
 
+export async function evaluateAnswer(params: {
+  question: string
+  correctAnswer: string
+  studentAnswer: string
+  topicName: string
+}): Promise<{ correct: boolean; feedback: string }> {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  if (!apiKey) return { correct: false, feedback: '' }
+
+  const prompt = `You are evaluating a Year 6 student's answer. Be generous — accept all equivalent forms.
+
+Question: ${params.question}
+Correct answer: ${params.correctAnswer}
+Student answered: ${params.studentAnswer}
+Topic: ${params.topicName}
+
+Evaluation rules:
+- Accept mathematically equivalent forms: 0 = 0/12, 1/2 = 0.5, 50% = 0.5, 2/4 = 1/2, etc.
+- Accept answers with or without units when the unit is clear from context
+- Accept equivalent fractions, decimals, and percentages
+- Accept correct synonyms and near-synonyms for verbal questions
+- Accept answers with minor spelling errors if clearly the right word
+- Accept if the student wrote extra working alongside the correct answer
+- Only mark incorrect if the mathematical/conceptual value is genuinely wrong
+
+Respond with JSON only, no markdown:
+{"correct": true/false, "feedback": "1-2 encouraging sentences. If correct: briefly reinforce why. If not quite right: explain the gap gently without saying 'wrong' or 'incorrect' — say 'not quite' or 'close'. Reference what they wrote."}`
+
+  // Use haiku for speed — evaluation calls happen on every non-MC answer
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    })
+    if (!response.ok) throw new Error('eval API error')
+    const data = await response.json() as { content: { type: string; text: string }[] }
+    const text = data.content.find(c => c.type === 'text')?.text ?? ''
+    const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
+    return JSON.parse(cleaned) as { correct: boolean; feedback: string }
+  } catch {
+    // Fallback to string match if AI eval fails
+    const norm = (s: string) => s.toLowerCase().replace(/^[a-d]\)\s*/i, '').trim()
+    return { correct: norm(params.studentAnswer) === norm(params.correctAnswer), feedback: '' }
+  }
+}
+
 export async function generateSessionSummary(params: {
   topicNames: string[]
   correctCount: number
