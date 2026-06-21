@@ -122,6 +122,7 @@ export function useStudySession(
     } catch {
       const fallback = getFallbackQuestion(topicId.current)
       console.log('[fetchNextQuestion] question generated (fallback) Q#' + questionNum)
+      previousQuestions.current.push(fallback.question.slice(0, 80))
       topicsUsed.current.add(fallback.topic_id)
       questionStartTime.current = Date.now()
       setState(prev => ({ ...prev, currentQuestion: fallback, loading: false }))
@@ -132,6 +133,7 @@ export function useStudySession(
     if (sessionStarted.current) return
     if (!user) return
     sessionStarted.current = true
+    previousQuestions.current = []  // fresh dedup list for this session
     try {
       const [{ data: mastery }, { data: offsetData }] = await Promise.all([
         supabase.from('mastery').select('*').eq('student_id', user.id),

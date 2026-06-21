@@ -63,7 +63,7 @@ Previous questions this session (do not repeat): ${params.previousQuestions.join
 Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
 
   const body = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userContent }],
@@ -195,7 +195,7 @@ Respond with just the message text, no quotes, no JSON.`
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 150,
         messages: [{ role: 'user', content: prompt }],
       }),

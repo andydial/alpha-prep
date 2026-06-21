@@ -25,7 +25,7 @@ Build a personalised AI study platform to prepare a Year 6 student for the EDSC 
 | Styling | Tailwind CSS v3 | Mobile-friendly, clean |
 | Database | Supabase (Postgres) | Free tier, 500MB |
 | Auth | Supabase Auth | Email/password, 2 users: student + parent |
-| AI | Anthropic API `claude-sonnet-4-20250514` | Question generation + explanations |
+| AI | Anthropic API `claude-sonnet-4-6` | Question generation + explanations |
 | Hosting | Netlify | Deploy from GitHub, auto CI/CD |
 | Charts | Recharts | Progress visualisation |
 
@@ -342,7 +342,7 @@ async function generateQuestion(params: {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 1000,
       system: SYSTEM_PROMPT,
       messages: [{
