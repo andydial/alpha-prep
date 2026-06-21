@@ -59,7 +59,7 @@ export async function generateQuestion(params: {
   const userContent = `Generate ONE question for topic: "${params.topicName}" (id: ${params.topicId}).
 Difficulty: ${params.difficulty}/10.
 Week ${params.weekNumber} of 8-week exam prep (ramp difficulty accordingly).
-Previous questions this session (do not repeat): ${params.previousQuestions.slice(-5).join(' | ') || 'none yet'}
+Previous questions this session (do not repeat): ${params.previousQuestions.join(' | ') || 'none yet'}
 Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
 
   const body = {
