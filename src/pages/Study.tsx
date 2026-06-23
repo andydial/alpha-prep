@@ -25,7 +25,7 @@ export function Study() {
 
   const {
     state, initSession, handleAnswer, handleNext,
-    setHintUsed, dismissTransition, finishSession, QUESTIONS_PER_SESSION,
+    setHintUsed, dismissTransition, finishSession, flagCurrentQuestion, QUESTIONS_PER_SESSION,
   } = useStudySession(user, null, domainPair, totalQuestions, forcedTopicId)
 
   const {
@@ -138,6 +138,7 @@ export function Study() {
                     hintUsed={hintUsed}
                     xpEarned={xpEarned}
                     onNext={onNext}
+                    onFlag={() => { void flagCurrentQuestion() }}
                   />
                 )}
               </>

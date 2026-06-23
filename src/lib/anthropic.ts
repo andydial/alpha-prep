@@ -27,6 +27,8 @@ TONE FOR EXPLANATIONS:
 - Treat Aarav as a capable, intelligent student who can handle stretch content
 - Occasionally acknowledge difficulty: "This is a tough one — well done for attempting it"
 
+IMPORTANT: Before returning your JSON, verify your correct_answer by working through the problem step by step. Your explanation must arrive at the same answer as correct_answer. Never let these disagree. For multiple_choice questions: verify that exactly one option matches correct_answer exactly. The correct_answer field must be copied verbatim from one of the options array entries. If no option matches, fix the options before returning JSON.
+
 OUTPUT FORMAT: Always respond with valid JSON only, no markdown, no preamble.`
 
 const QUESTION_SCHEMA = `{
@@ -98,6 +100,26 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
 
       // Enforce difficulty floor
       if (question.difficulty < 5) question.difficulty = 5
+
+      // Validate MC options actually contain the correct answer.
+      // A mismatch throws → the existing loop re-requests once, then falls back.
+      if (question.type === 'multiple_choice') {
+        const opts = question.options ?? []
+        const answer = (question.correct_answer ?? '').trim()
+        const letterOnly = answer.match(/^([A-D])\)?$/i)
+        const hasMatch = letterOnly
+          // Bare-letter answer (e.g. "A" or "B)") — match an option labelled with that letter
+          ? opts.some(opt => opt.trim().toUpperCase().startsWith(`${letterOnly[1].toUpperCase()})`))
+          // Substantive answer — match an option that contains the answer text verbatim
+          : answer.length > 0 && opts.some(opt => opt.includes(answer))
+        if (!hasMatch) {
+          console.warn(
+            `[generateQuestion] MC correct_answer not in options (topic ${params.topicId}). ` +
+            `answer="${answer}" options=${JSON.stringify(opts)}`
+          )
+          throw new Error('MC_OPTION_MISMATCH')
+        }
+      }
 
       return question
     } catch (err) {

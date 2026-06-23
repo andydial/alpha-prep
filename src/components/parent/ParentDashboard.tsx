@@ -19,6 +19,7 @@ interface ParentDashboardProps {
 export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
   const [studentProfile, setStudentProfile] = useState<Profile | null>(null)
   const [recentSessions, setRecentSessions] = useState<Session[]>([])
+  const [flaggedCount, setFlaggedCount] = useState(0)
 
   const { mastery } = useProgress(STUDENT_ID)
   const { plan } = useWeeklyPlan(STUDENT_ID)
@@ -37,6 +38,12 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
         .order('completed_at', { ascending: false })
         .limit(5)
       setRecentSessions(sessionData ?? [])
+
+      const { count } = await supabase
+        .from('attempts').select('id', { count: 'exact', head: true })
+        .eq('student_id', STUDENT_ID)
+        .eq('flagged', true)
+      setFlaggedCount(count ?? 0)
     }
     void load()
   }, [])
@@ -55,6 +62,15 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
         </h1>
         <p className="text-gray-400 text-sm mt-0.5">Aarav's study overview</p>
       </div>
+
+      {/* Flagged questions banner */}
+      {flaggedCount > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-3">
+          <p className="text-amber-300 text-sm font-medium">
+            ⚑ {flaggedCount} flagged {flaggedCount === 1 ? 'question' : 'questions'} awaiting review
+          </p>
+        </div>
+      )}
 
       {/* 2. Countdown + Aarav's stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

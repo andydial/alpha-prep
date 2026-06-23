@@ -40,6 +40,7 @@ export interface StudySessionState {
   activeDomain: Domain
   domainPair: DomainPair
   showStreamTransition: boolean
+  currentAttemptId: string | null
 }
 
 export function useStudySession(
@@ -67,7 +68,12 @@ export function useStudySession(
     activeDomain: domainPair[0],
     domainPair,
     showStreamTransition: false,
+    currentAttemptId: null,
   })
+
+  // Mirror of latest state for async callbacks (e.g. flagging) that need fresh values
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const sessionStartTime = useRef(0)
   const questionStartTime = useRef(0)
@@ -99,6 +105,7 @@ export function useStudySession(
       aiFeedback: '',
       hintUsed: false,
       activeDomain,
+      currentAttemptId: null,
     }))
 
     topicId.current = forcedTopicId ?? selectTopicFromDomain(activeDomain, masteryRef.current)
@@ -223,11 +230,12 @@ export function useStudySession(
 
     // Fire-and-forget: save attempt immediately on submit, before explanation renders.
     // Never await — explanation must appear instantly. Errors are logged only.
-    void supabase.from('attempts').insert({ ...baseAttempt, xp_earned: xp }).then(({ error }) => {
-      if (!error) return
+    void supabase.from('attempts').insert({ ...baseAttempt, xp_earned: xp }).select('id').single().then(({ data, error }) => {
+      if (!error) { setState(prev => ({ ...prev, currentAttemptId: data?.id ?? null })); return }
       if (error.code === '42703') {
-        void supabase.from('attempts').insert(baseAttempt).then(({ error: e2 }) => {
-          if (e2) console.error('[handleAnswer] attempt insert failed:', e2)
+        void supabase.from('attempts').insert(baseAttempt).select('id').single().then(({ data: d2, error: e2 }) => {
+          if (e2) { console.error('[handleAnswer] attempt insert failed:', e2); return }
+          setState(prev => ({ ...prev, currentAttemptId: d2?.id ?? null }))
         })
       } else {
         console.error('[handleAnswer] attempt insert failed:', error)
@@ -343,5 +351,26 @@ export function useStudySession(
     await fetchNextQuestion(streamBoundary.current + 1)
   }
 
-  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, finishSession, QUESTIONS_PER_SESSION: totalQuestions }
+  // Flag the current question as incorrect. Marks the attempt row and, if the
+  // answer was wrong, restores the XP they would have earned (correct XP minus
+  // the flat 5 awarded for a wrong attempt) directly onto profiles.xp_total.
+  async function flagCurrentQuestion() {
+    const { currentAttemptId, isCorrect, currentQuestion, hintUsed } = stateRef.current
+    if (!currentAttemptId || !user) return
+
+    const { error } = await supabase.from('attempts').update({ flagged: true }).eq('id', currentAttemptId)
+    if (error && error.code !== '42703') console.error('[flag] update failed:', error)
+
+    if (!isCorrect && currentQuestion) {
+      const restore = calculateXP(true, currentQuestion.difficulty, hintUsed) - 5
+      const { data: prof } = await supabase.from('profiles').select('xp_total').eq('id', user.id).single()
+      const { error: xpErr } = await supabase
+        .from('profiles')
+        .update({ xp_total: (prof?.xp_total ?? 0) + restore })
+        .eq('id', user.id)
+      if (xpErr) console.error('[flag] xp restore failed:', xpErr)
+    }
+  }
+
+  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, finishSession, flagCurrentQuestion, QUESTIONS_PER_SESSION: totalQuestions }
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { CheckCircle, XCircle, ArrowRight } from 'lucide-react'
 
 interface ExplanationPanelProps {
@@ -7,6 +8,7 @@ interface ExplanationPanelProps {
   hintUsed: boolean
   xpEarned: number
   onNext: () => void
+  onFlag?: () => void
 }
 
 export function ExplanationPanel({
@@ -16,7 +18,9 @@ export function ExplanationPanel({
   hintUsed,
   xpEarned,
   onNext,
+  onFlag,
 }: ExplanationPanelProps) {
+  const [flagged, setFlagged] = useState(false)
   const ENCOURAGEMENTS = ['Nice work!', 'Correct!', 'Nailed it!', 'Well done!', 'Spot on!']
   const encouragement = ENCOURAGEMENTS[Math.floor(Date.now() / 1000) % ENCOURAGEMENTS.length]
 
@@ -67,6 +71,24 @@ export function ExplanationPanel({
 
       {/* Explanation */}
       <p className="text-gray-200 text-sm leading-relaxed">{explanation}</p>
+
+      {/* Flag as incorrect — unobtrusive */}
+      {onFlag && (
+        flagged ? (
+          <p className="text-xs text-gray-400 italic">
+            {isCorrect
+              ? "Thanks — we'll review this question."
+              : "Thanks — we'll review this question. Your XP has been restored."}
+          </p>
+        ) : (
+          <button
+            onClick={() => { setFlagged(true); onFlag() }}
+            className="text-xs text-gray-500 hover:text-amber-400 transition-colors"
+          >
+            ⚑ Flag as incorrect
+          </button>
+        )
+      )}
 
       {/* Next button */}
       <button
