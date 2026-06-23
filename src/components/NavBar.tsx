@@ -62,6 +62,8 @@ export function NavBar() {
             <>
               <NavItem to="/study" label="Study" />
               <NavItem to="/progress" label="Progress" />
+              <NavItem to="/store" label="Store" />
+              <NavItem to="/squad" label="My Squad" />
             </>
           )}
           {profile?.role === 'parent' && (
@@ -118,6 +120,8 @@ export function NavBar() {
             <>
               <NavItem to="/study" label="Study" onClick={() => setMenuOpen(false)} />
               <NavItem to="/progress" label="Progress" onClick={() => setMenuOpen(false)} />
+              <NavItem to="/store" label="Store" onClick={() => setMenuOpen(false)} />
+              <NavItem to="/squad" label="My Squad" onClick={() => setMenuOpen(false)} />
             </>
           )}
           {profile?.role === 'parent' && (

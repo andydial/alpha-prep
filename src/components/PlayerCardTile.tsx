@@ -79,9 +79,14 @@ export function PlayerCardTile({
 
   return (
     <div className={`bg-gradient-to-b ${s.bg} border-2 ${s.border} rounded-2xl p-3 flex flex-col gap-2`}>
-      {/* Rating + tier badge */}
+      {/* Rating + position + tier badge */}
       <div className="flex items-start justify-between">
-        <span className={`font-black text-3xl leading-none ${s.ratingColor}`}>{card.rating}</span>
+        <div className="flex items-baseline gap-2">
+          <span className={`font-black text-3xl leading-none ${s.ratingColor}`}>{card.rating}</span>
+          {card.position && (
+            <span className={`text-xs font-bold ${s.statColor}`}>{card.position}</span>
+          )}
+        </div>
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.badge}`}>
           {TIER_LABEL[card.tier]}
         </span>

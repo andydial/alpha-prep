@@ -120,6 +120,7 @@ export interface PlayerCard {
   name: string
   rating: number
   tier: CardTier
+  position: string | null
   pace: number | null
   shooting: number | null
   passing: number | null
