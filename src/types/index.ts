@@ -8,6 +8,7 @@ export interface Profile {
   streak_best: number
   last_session_date: string | null
   created_at: string
+  formation: string | null
 }
 
 export type Domain = 'maths' | 'reading' | 'verbal' | 'abstract' | 'writing'
@@ -137,6 +138,7 @@ export interface StudentCard {
   card_id: string
   purchased_at: string
   xp_spent: number
+  squad_position: string | null
   player_cards?: PlayerCard
 }
 
