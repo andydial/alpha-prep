@@ -58,10 +58,17 @@ export async function generateQuestion(params: {
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
   if (!apiKey) throw new Error('Missing VITE_ANTHROPIC_API_KEY')
 
+  const alreadyAsked = params.previousQuestions.length > 0
+    ? params.previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')
+    : '(none yet — this is the first question)'
+
   const userContent = `Generate ONE question for topic: "${params.topicName}" (id: ${params.topicId}).
 Difficulty: ${params.difficulty}/10.
 Week ${params.weekNumber} of 8-week exam prep (ramp difficulty accordingly).
-Previous questions this session (do not repeat): ${params.previousQuestions.join(' | ') || 'none yet'}
+
+ALREADY ASKED THIS SESSION — your question must be different from every one of these, not just reworded. Use a different scenario, different numbers and a different underlying set-up:
+${alreadyAsked}
+
 Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
 
   const body = {

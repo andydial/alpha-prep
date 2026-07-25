@@ -3,6 +3,7 @@ import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { generateQuestion, evaluateAnswer } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
+import { SeenQuestions } from '../lib/questionDedup'
 import {
   getTopicById,
   getInitialDifficulty, getNextDifficulty, calculateXP, getWeekNumber,
@@ -78,6 +79,10 @@ export function useStudySession(
   const sessionStartTime = useRef(0)
   const questionStartTime = useRef(0)
   const previousQuestions = useRef<string[]>([])
+  // Hard guarantee that no question repeats within a session. The AI prompt
+  // asks for variety; this is what actually enforces it.
+  const seenQuestions = useRef(new SeenQuestions())
+  const aiFailures = useRef(0)
   const recentResults = useRef<boolean[]>([])
   const currentDifficulty = useRef(DIFFICULTY_DEFAULT)
   const topicId = useRef('maths_fractions')
@@ -112,28 +117,62 @@ export function useStudySession(
     const topic = getTopicById(topicId.current)
     const weekNum = getWeekNumber(EXAM_DATE)
 
-    try {
-      const clampedDifficulty = Math.max(5, Math.min(10, currentDifficulty.current + difficultyOffset.current))
-      const q = await generateQuestion({
-        topicId: topicId.current,
-        topicName: topic?.name ?? topicId.current,
-        difficulty: clampedDifficulty,
-        previousQuestions: previousQuestions.current,
-        weekNumber: weekNum,
-      })
-      console.log('[fetchNextQuestion] question generated Q#' + questionNum)
-      previousQuestions.current.push(q.question.slice(0, 80))
+    const clampedDifficulty = Math.max(5, Math.min(10, currentDifficulty.current + difficultyOffset.current))
+
+    const accept = (q: Question, source: string) => {
+      seenQuestions.current.add(q)
+      previousQuestions.current.push(q.question.slice(0, 120))
       topicsUsed.current.add(q.topic_id)
       questionStartTime.current = Date.now()
+      console.log(`[fetchNextQuestion] Q#${questionNum} from ${source} (${seenQuestions.current.size} unique so far)`)
       setState(prev => ({ ...prev, currentQuestion: q, loading: false }))
-    } catch {
-      const fallback = getFallbackQuestion(topicId.current)
-      console.log('[fetchNextQuestion] question generated (fallback) Q#' + questionNum)
-      previousQuestions.current.push(fallback.question.slice(0, 80))
-      topicsUsed.current.add(fallback.topic_id)
-      questionStartTime.current = Date.now()
-      setState(prev => ({ ...prev, currentQuestion: fallback, loading: false }))
     }
+
+    // Ask the AI, rejecting any question the session has already served. A
+    // duplicate is retried rather than shown — up to 3 attempts.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const q = await generateQuestion({
+          topicId: topicId.current,
+          topicName: topic?.name ?? topicId.current,
+          difficulty: clampedDifficulty,
+          previousQuestions: previousQuestions.current,
+          weekNumber: weekNum,
+        })
+        if (seenQuestions.current.has(q)) {
+          console.warn(`[fetchNextQuestion] duplicate from AI, retrying (attempt ${attempt + 1})`)
+          continue
+        }
+        aiFailures.current = 0
+        accept(q, 'AI')
+        return
+      } catch (err) {
+        aiFailures.current += 1
+        console.error(`[fetchNextQuestion] AI generation failed (attempt ${attempt + 1}):`, err)
+        break // generateQuestion already retries internally; don't hammer a dead API
+      }
+    }
+
+    // AI unavailable or repeating — fall back to the offline bank, still
+    // excluding everything already served this session.
+    const fallback = getFallbackQuestion(
+      topicId.current,
+      new Set(seenQuestions.current.toArray()),
+    )
+    if (fallback) {
+      accept(fallback, 'offline bank')
+      return
+    }
+
+    // Bank exhausted. Surfacing this is deliberate — serving a repeat would be
+    // worse than stopping, and it tells us the AI has been down for a while.
+    setState(prev => ({
+      ...prev,
+      loading: false,
+      error: aiFailures.current > 0
+        ? 'Question generation is unavailable and the offline backup questions are used up. Check the Anthropic API key and credit balance, then start a new session.'
+        : 'Ran out of new questions for this session. Please start a new session.',
+    }))
   }, [domainPair])
 
   async function initSession() {
@@ -141,6 +180,8 @@ export function useStudySession(
     if (!user) return
     sessionStarted.current = true
     previousQuestions.current = []  // fresh dedup list for this session
+    seenQuestions.current.clear()
+    aiFailures.current = 0
     try {
       const [{ data: mastery }, { data: offsetData }] = await Promise.all([
         supabase.from('mastery').select('*').eq('student_id', user.id),
