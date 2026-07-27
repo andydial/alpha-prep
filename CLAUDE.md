@@ -767,6 +767,12 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 
 ✅ **Parent dashboard — FIXED (June 2026).** Rendering correctly with domain performance, curriculum coverage, Aarav's stats.
 
+✅ **Parent session reporting — REBUILT (July 2026).** `/report` now leads with every completed session (date, time spent, questions attempted, score). Each row opens `/report/session/:id` showing the per-domain/topic breakdown and a card per wrong answer (question, Aarav's answer, correct answer). Mastery/domains/badges moved into a collapsed section. Spec: `docs/superpowers/specs/2026-07-27-parent-session-reporting-design.md`.
+
+⚠️ **`session_type` is mislabelled at the write site.** `useStudySession.ts` writes `session_type: totalQuestions < 40 ? 'test' : 'practice'`, so every quick/domain/drill session is tagged `'test'`. The parent views no longer filter on it (that filter was hiding most of Aarav's sessions), but the column itself is still wrong and should not be used as a filter anywhere.
+
+⚠️ **`sessions.total_questions` is the planned count, not the actual.** `finishSession()` writes the configured target, so an abandoned session overstates what was answered. Parent views count from `attempts` rows instead.
+
 ❌ **Weekly plan not displaying** — Dashboard Week Focus card not reading generated plan correctly.
 
 ❌ **Session mode selection** — not built yet. Aarav/parent should choose before starting: full planned (40Q), single domain (20Q), single topic drill (15Q).

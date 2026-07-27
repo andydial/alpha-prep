@@ -5,6 +5,7 @@ import { Results } from './pages/Results'
 import { Dashboard } from './pages/Dashboard'
 import { Progress } from './pages/Progress'
 import { ParentReport } from './pages/ParentReport'
+import { ParentSessionDetail } from './pages/ParentSessionDetail'
 import { Settings } from './pages/Settings'
 import { Store } from './pages/Store'
 import { Squad } from './pages/Squad'
@@ -71,6 +72,14 @@ export default function App() {
           element={
             <AuthGuard requireRole="parent">
               <AuthLayout><ParentReport /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/report/session/:sessionId"
+          element={
+            <AuthGuard requireRole="parent">
+              <AuthLayout><ParentSessionDetail /></AuthLayout>
             </AuthGuard>
           }
         />

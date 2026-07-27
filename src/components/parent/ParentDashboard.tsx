@@ -7,6 +7,7 @@ import { CountdownBanner } from '../CountdownBanner'
 import { DomainPerformanceGrid } from './DomainPerformanceGrid'
 import { RecentActivityFeed } from './RecentActivityFeed'
 import { CurriculumCoverage } from './CurriculumCoverage'
+import type { SessionSummary } from '../../hooks/useParentReport'
 import type { Profile, Session } from '../../types'
 
 // TODO: replace with dynamic child lookup when multi-child support is added
@@ -18,7 +19,7 @@ interface ParentDashboardProps {
 
 export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
   const [studentProfile, setStudentProfile] = useState<Profile | null>(null)
-  const [recentSessions, setRecentSessions] = useState<Session[]>([])
+  const [recentSessions, setRecentSessions] = useState<SessionSummary[]>([])
   const [flaggedCount, setFlaggedCount] = useState(0)
 
   const { mastery } = useProgress(STUDENT_ID)
@@ -30,14 +31,42 @@ export function ParentDashboard({ parentProfile }: ParentDashboardProps) {
         .from('profiles').select('*').eq('id', STUDENT_ID).single()
       setStudentProfile(profileData)
 
+      // No session_type filter: useStudySession tags anything under 40 questions as
+      // 'test', so filtering it would hide every quick / domain / drill session.
       const { data: sessionData } = await supabase
         .from('sessions').select('*')
         .eq('student_id', STUDENT_ID)
         .not('completed_at', 'is', null)
-        .neq('session_type', 'test')
         .order('completed_at', { ascending: false })
         .limit(5)
-      setRecentSessions(sessionData ?? [])
+      const sessionRows = (sessionData ?? []) as Session[]
+
+      // Count from real attempt rows — sessions.total_questions holds the *planned*
+      // count, so an early exit would otherwise overstate what he answered.
+      const attemptRows = sessionRows.length === 0 ? [] : (
+        await supabase
+          .from('attempts').select('session_id, is_correct')
+          .in('session_id', sessionRows.map(s => s.id))
+      ).data ?? []
+      const tallies = new Map<string, { attempted: number; correct: number }>()
+      for (const row of attemptRows ?? []) {
+        if (!row.session_id) continue
+        const t = tallies.get(row.session_id) ?? { attempted: 0, correct: 0 }
+        t.attempted += 1
+        if (row.is_correct) t.correct += 1
+        tallies.set(row.session_id, t)
+      }
+
+      setRecentSessions(sessionRows.map(s => {
+        const attempted = tallies.get(s.id)?.attempted ?? s.total_questions ?? 0
+        const correct = tallies.get(s.id)?.correct ?? s.correct_count ?? 0
+        return {
+          ...s,
+          attempted,
+          correct,
+          accuracy: attempted > 0 ? Math.round((correct / attempted) * 100) : null,
+        }
+      }))
 
       const { count } = await supabase
         .from('attempts').select('id', { count: 'exact', head: true })
