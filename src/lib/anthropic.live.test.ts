@@ -8,7 +8,11 @@ import { answerConsistentWithWorking, balanceOptions, checkAnswer } from './answ
  *
  *   RUN_LIVE_TESTS=1 npx vitest run src/lib/anthropic.live.test.ts
  */
-const live = process.env.RUN_LIVE_TESTS ? describe : describe.skip
+// Reached via globalThis: `process` is not typed in the browser tsconfig this
+// file is built under, and `tsc -b` is part of the production build.
+const runLive = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+  .process?.env?.RUN_LIVE_TESTS
+const live = runLive ? describe : describe.skip
 
 live('marking a question whose answer key is wrong', () => {
   // The exact question Aarav was marked wrong on: T(4) = 27, T(6) = 53,
