@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { FALLBACK_QUESTIONS, getFallbackQuestion } from './fallbackQuestions'
 import { questionSignature, SeenQuestions } from './questionDedup'
 import { getTopicById } from './curriculum'
+import { balanceOptions, checkAnswer, resetAnswerSlots } from './answerCheck'
 
 describe('offline question bank integrity', () => {
   it('contains no duplicate questions', () => {
@@ -28,6 +29,49 @@ describe('offline question bank integrity', () => {
       return !opts.some(o => o.trim() === q.correct_answer.trim())
     })
     expect(broken.map(q => q.question)).toEqual([])
+  })
+})
+
+describe('answer position across a served session', () => {
+  beforeEach(resetAnswerSlots)
+
+  it('the raw bank is badly skewed — which is why serving must rebalance it', () => {
+    const raw = [0, 0, 0, 0]
+    for (const q of FALLBACK_QUESTIONS) {
+      if (q.type !== 'multiple_choice') continue
+      raw[(q.options ?? []).findIndex(o => o.trim() === q.correct_answer.trim())] += 1
+    }
+    expect(Math.max(...raw)).toBeGreaterThan(raw.reduce((a, b) => a + b, 0) / 2)
+  })
+
+  it('serves the correct option evenly across A–D once rebalanced', () => {
+    const served = [0, 0, 0, 0]
+    for (let run = 0; run < 20; run++) {
+      const seen = new SeenQuestions()
+      for (let i = 0; i < 20; i++) {
+        const raw = getFallbackQuestion('maths_fractions', new Set(seen.toArray()))
+        if (!raw) break
+        seen.add(raw)
+        if (raw.type !== 'multiple_choice') continue
+        const q = balanceOptions(raw)
+        served[(q.options ?? []).indexOf(q.correct_answer)] += 1
+      }
+    }
+    const total = served.reduce((a, b) => a + b, 0)
+    expect(total).toBeGreaterThan(40)
+    // Perfectly even bar the partial cycle at the end of the run
+    for (const count of served) {
+      expect(Math.abs(count - total / 4)).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('keeps every rebalanced answer key an exact option string', () => {
+    for (const raw of FALLBACK_QUESTIONS) {
+      if (raw.type !== 'multiple_choice') continue
+      const q = balanceOptions(raw)
+      expect(q.options, q.question).toContain(q.correct_answer)
+      expect(checkAnswer(q.correct_answer, q.correct_answer, q.options)).toBe(true)
+    }
   })
 })
 

@@ -91,6 +91,10 @@ export interface Question {
   topic_id: string
   hint: string
   explanation: string
+  /** Model's step-by-step solution to its own question, generated before
+   *  correct_answer so the answer follows the reasoning. Used to verify the
+   *  answer key; not shown to the student and not persisted. */
+  working?: string
 }
 
 export interface Badge {

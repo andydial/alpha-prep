@@ -773,6 +773,10 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 
 ⚠️ **`sessions.total_questions` is the planned count, not the actual.** `finishSession()` writes the configured target, so an abandoned session overstates what was answered. Parent views count from `attempts` rows instead.
 
+✅ **Correct option almost always B — FIXED (August 2026).** Neither generator controlled answer placement: the model parks the answer at B (measured live: 5 of 10 at B, 0 at D) and the offline bank had 24 of 32 at A. `balanceOptions` in `src/lib/answerCheck.ts` re-places and re-labels every MC question on a drained-bag cycle, applied in `useStudySession.accept()` so AI and fallback questions both get it. Placement is now exactly uniform across A–D.
+
+✅ **Right answer marked wrong — FIXED (August 2026).** The model asserted `correct_answer` before reasoning, and the marker was handed that key up front, so a bad key beat the student even when the working shown underneath reached the student's number. Three changes: `working` now precedes `correct_answer` in the generation schema (answer follows the reasoning); `answerConsistentWithWorking` rejects a numeric key that appears nowhere in its own working, before the question is served; `evaluateAnswer` re-solves the question independently before it may look at the key, marks correct against either result, runs on Sonnet, and now also acts as a second opinion on any MC answer marked wrong locally. The verified answer is what gets displayed and stored. Live regression tests: `src/lib/anthropic.live.test.ts` (`RUN_LIVE_TESTS=1`).
+
 ❌ **Weekly plan not displaying** — Dashboard Week Focus card not reading generated plan correctly.
 
 ❌ **Session mode selection** — not built yet. Aarav/parent should choose before starting: full planned (40Q), single domain (20Q), single topic drill (15Q).

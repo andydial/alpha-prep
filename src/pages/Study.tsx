@@ -133,7 +133,7 @@ export function Study() {
                 ) : (
                   <ExplanationPanel
                     isCorrect={isCorrect}
-                    correctAnswer={currentQuestion!.correct_answer}
+                    correctAnswer={state.resolvedAnswer || currentQuestion!.correct_answer}
                     explanation={aiFeedback || currentQuestion!.explanation}
                     hintUsed={hintUsed}
                     xpEarned={xpEarned}

@@ -1,4 +1,5 @@
 import type { Question } from '../types'
+import { checkAnswer, answerConsistentWithWorking } from './answerCheck'
 
 const SYSTEM_PROMPT = `You are an expert Australian tutor preparing Aarav, a high-achieving Year 6 student, for the EDSC Alpha (accelerated learning) entrance exam in Victoria. Aarav is near the top of his class and thrives on challenge — he should always feel stretched, never bored.
 
@@ -27,15 +28,25 @@ TONE FOR EXPLANATIONS:
 - Treat Aarav as a capable, intelligent student who can handle stretch content
 - Occasionally acknowledge difficulty: "This is a tough one — well done for attempting it"
 
-IMPORTANT: Before returning your JSON, verify your correct_answer by working through the problem step by step. Your explanation must arrive at the same answer as correct_answer. Never let these disagree. For multiple_choice questions: verify that exactly one option matches correct_answer exactly. The correct_answer field must be copied verbatim from one of the options array entries. If no option matches, fix the options before returning JSON.
+ANSWER CORRECTNESS — THIS MATTERS MORE THAN ANYTHING ELSE:
+- Solve the question yourself in the "working" field BEFORE you write "correct_answer". Never write the answer first and justify it afterwards.
+- "working" must show every calculation step and end with the final result stated plainly.
+- "correct_answer" must be the exact final result of your working. If they disagree, your working wins — go back and fix correct_answer.
+- A question whose stated answer contradicts its own working is worse than no question at all. Aarav is marked against this field.
+- For multiple_choice: exactly one option must equal correct_answer, and correct_answer must be copied verbatim from the options array. Every distractor must be genuinely incorrect — never two defensible answers.
 
-OUTPUT FORMAT: Always respond with valid JSON only, no markdown, no preamble.`
+OUTPUT FORMAT: Always respond with valid JSON only, no markdown, no preamble. Emit the fields in exactly the order given in the schema.`
 
+// Field order is deliberate: "working" comes before "correct_answer" so the
+// model reasons to the answer instead of asserting one and rationalising it
+// afterwards. That ordering is the fix for answer keys that contradicted their
+// own explanation.
 const QUESTION_SCHEMA = `{
   "question": "string — the full question text",
   "type": "multiple_choice | short_answer | numeric",
   "options": ["A) ...", "B) ...", "C) ...", "D) ..."] or null,
-  "correct_answer": "string — exact answer",
+  "working": "string — solve YOUR OWN question here, step by step, every calculation shown, ending with the final result stated plainly. Write this BEFORE correct_answer.",
+  "correct_answer": "string — the exact final result of your working (for multiple_choice, copied verbatim from options)",
   "difficulty": number 1-10,
   "topic_id": "string — matches topic id",
   "hint": "string — one sentence hint without giving away answer",
@@ -113,12 +124,7 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
       if (question.type === 'multiple_choice') {
         const opts = question.options ?? []
         const answer = (question.correct_answer ?? '').trim()
-        const letterOnly = answer.match(/^([A-D])\)?$/i)
-        const hasMatch = letterOnly
-          // Bare-letter answer (e.g. "A" or "B)") — match an option labelled with that letter
-          ? opts.some(opt => opt.trim().toUpperCase().startsWith(`${letterOnly[1].toUpperCase()})`))
-          // Substantive answer — match an option that contains the answer text verbatim
-          : answer.length > 0 && opts.some(opt => opt.includes(answer))
+        const hasMatch = answer.length > 0 && opts.some(opt => checkAnswer(opt, answer, opts))
         if (!hasMatch) {
           console.warn(
             `[generateQuestion] MC correct_answer not in options (topic ${params.topicId}). ` +
@@ -126,6 +132,18 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
           )
           throw new Error('MC_OPTION_MISMATCH')
         }
+      }
+
+      // Reject any question whose stated answer does not follow from the
+      // working the model just showed. This is the guard against the "marked
+      // wrong for a right answer" failure — a bad key is caught before Aarav
+      // ever sees the question, and the loop regenerates.
+      if (!answerConsistentWithWorking(question.correct_answer, question.working ?? '')) {
+        console.warn(
+          `[generateQuestion] answer/working mismatch (topic ${params.topicId}). ` +
+          `answer="${question.correct_answer}" working="${question.working}"`
+        )
+        throw new Error('ANSWER_WORKING_MISMATCH')
       }
 
       return question
@@ -141,35 +159,75 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
   throw lastError ?? new Error('Failed to generate question after 2 attempts')
 }
 
+export interface AnswerVerdict {
+  correct: boolean
+  feedback: string
+  /** The answer the marker itself derived — what the student should be shown
+   *  as "correct answer", which is not always the supplied key. */
+  resolvedAnswer: string
+  /** True when the supplied answer key disagreed with the marker's own working. */
+  keyDisputed: boolean
+}
+
+/**
+ * Mark an answer by solving the question independently FIRST, then comparing.
+ *
+ * The old version was handed the answer key up front and told to compare
+ * against it, so a bad key marked a right answer wrong — the marker would even
+ * show working that reached the student's number and still say "not quite".
+ * Here the marker commits to its own result before it is allowed to look at the
+ * key, and a student matching either one is marked correct.
+ */
 export async function evaluateAnswer(params: {
   question: string
   correctAnswer: string
   studentAnswer: string
   topicName: string
-}): Promise<{ correct: boolean; feedback: string }> {
+  options?: string[] | null
+}): Promise<AnswerVerdict> {
+  const localFallback = (): AnswerVerdict => ({
+    correct: checkAnswer(params.studentAnswer, params.correctAnswer, params.options),
+    feedback: '',
+    resolvedAnswer: params.correctAnswer,
+    keyDisputed: false,
+  })
+
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-  if (!apiKey) return { correct: false, feedback: '' }
+  if (!apiKey) return localFallback()
 
-  const prompt = `You are evaluating a Year 6 student's answer. Be generous — accept all equivalent forms.
+  const optionsBlock = params.options?.length
+    ? `\nOptions offered: ${params.options.join(' | ')}`
+    : ''
 
-Question: ${params.question}
-Correct answer: ${params.correctAnswer}
-Student answered: ${params.studentAnswer}
+  const prompt = `You are marking a Year 6 student's answer. Two rules override everything else: never mark a right answer wrong, and be generous about form.
+
+Question: ${params.question}${optionsBlock}
 Topic: ${params.topicName}
+Supplied answer key: ${params.correctAnswer}
+Student answered: ${params.studentAnswer}
+
+STEP 1 — Solve the question YOURSELF, from scratch, showing every step. Do this before you consider the supplied key. The key was written by another model and is occasionally wrong; your own working is the tie-breaker.
+STEP 2 — Compare your own result with the supplied key and say whether they agree.
+STEP 3 — Mark the student CORRECT if their answer matches EITHER your own result OR the supplied key.
 
 Evaluation rules:
 - Accept mathematically equivalent forms: 0 = 0/12, 1/2 = 0.5, 50% = 0.5, 2/4 = 1/2, etc.
 - Accept answers with or without units when the unit is clear from context
 - Accept equivalent fractions, decimals, and percentages
+- Accept a bare option letter, a bare option text, or the full labelled option as the same answer
 - Accept correct synonyms and near-synonyms for verbal questions
 - Accept answers with minor spelling errors if clearly the right word
 - Accept if the student wrote extra working alongside the correct answer
 - Only mark incorrect if the mathematical/conceptual value is genuinely wrong
 
-Respond with JSON only, no markdown:
-{"correct": true/false, "feedback": "1-2 encouraging sentences. If correct: briefly reinforce why. If not quite right: explain the gap gently without saying 'wrong' or 'incorrect' — say 'not quite' or 'close'. Reference what they wrote."}`
+Feedback rules:
+- Never state a "correct answer" that contradicts your own working
+- If the supplied key was wrong and the student was right, simply confirm they are right — do not mention the key or the disagreement
+- Encouraging tone; never the words "wrong" or "incorrect" — use "not quite" or "close"
 
-  // Use haiku for speed — evaluation calls happen on every non-MC answer
+Respond with JSON only, no markdown, fields in exactly this order:
+{"working": "your own step-by-step solution", "independent_answer": "your own final answer", "key_matches_working": true/false, "correct": true/false, "feedback": "1-2 encouraging sentences. If correct: briefly reinforce why. If not quite right: explain the gap gently, referencing what they wrote."}`
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -180,8 +238,10 @@ Respond with JSON only, no markdown:
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
+        // Sonnet, not Haiku: this call decides whether Aarav is told he got it
+        // wrong. Marking accuracy is worth the extra second.
+        model: 'claude-sonnet-4-6',
+        max_tokens: 700,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
@@ -189,11 +249,41 @@ Respond with JSON only, no markdown:
     const data = await response.json() as { content: { type: string; text: string }[] }
     const text = data.content.find(c => c.type === 'text')?.text ?? ''
     const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
-    return JSON.parse(cleaned) as { correct: boolean; feedback: string }
+    const parsed = JSON.parse(cleaned) as {
+      working?: string
+      independent_answer?: string
+      key_matches_working?: boolean
+      correct?: boolean
+      feedback?: string
+    }
+
+    const independent = (parsed.independent_answer ?? '').trim()
+    const keyDisputed = independent.length > 0 && (
+      parsed.key_matches_working === false ||
+      !checkAnswer(independent, params.correctAnswer, params.options)
+    )
+
+    // Belt and braces: whatever the marker concluded, a student answer that
+    // matches the marker's own derived answer — or the key — is correct.
+    const correct = parsed.correct === true ||
+      (independent.length > 0 && checkAnswer(params.studentAnswer, independent, params.options)) ||
+      checkAnswer(params.studentAnswer, params.correctAnswer, params.options)
+
+    if (keyDisputed) {
+      console.warn(
+        `[evaluateAnswer] answer key disputed. key="${params.correctAnswer}" ` +
+        `marker="${independent}" working="${parsed.working ?? ''}"`
+      )
+    }
+
+    return {
+      correct,
+      feedback: parsed.feedback ?? '',
+      resolvedAnswer: keyDisputed && independent ? independent : params.correctAnswer,
+      keyDisputed,
+    }
   } catch {
-    // Fallback to string match if AI eval fails
-    const norm = (s: string) => s.toLowerCase().replace(/^[a-d]\)\s*/i, '').trim()
-    return { correct: norm(params.studentAnswer) === norm(params.correctAnswer), feedback: '' }
+    return localFallback()
   }
 }
 

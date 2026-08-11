@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { generateQuestion, evaluateAnswer } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
 import { SeenQuestions } from '../lib/questionDedup'
+import { balanceOptions, checkAnswer } from '../lib/answerCheck'
 import {
   getTopicById,
   getInitialDifficulty, getNextDifficulty, calculateXP, getWeekNumber,
@@ -15,13 +16,6 @@ import type { Question, Mastery, WeeklyPlan, Domain, DomainPair } from '../types
 const EXAM_DATE = new Date('2026-08-14')
 const DIFFICULTY_DEFAULT = 6
 
-function normalise(s: string) {
-  return s.toLowerCase().replace(/^[a-d]\)\s*/i, '').trim()
-}
-
-export function checkAnswer(student: string, correct: string): boolean {
-  return normalise(student) === normalise(correct)
-}
 
 export interface StudySessionState {
   sessionId: string | null
@@ -42,6 +36,9 @@ export interface StudySessionState {
   domainPair: DomainPair
   showStreamTransition: boolean
   currentAttemptId: string | null
+  /** Answer to display after marking — the marker's own result when it
+   *  disputed the generated key, otherwise the key itself. */
+  resolvedAnswer: string
 }
 
 export function useStudySession(
@@ -70,6 +67,7 @@ export function useStudySession(
     domainPair,
     showStreamTransition: false,
     currentAttemptId: null,
+    resolvedAnswer: '',
   })
 
   // Mirror of latest state for async callbacks (e.g. flagging) that need fresh values
@@ -111,6 +109,7 @@ export function useStudySession(
       hintUsed: false,
       activeDomain,
       currentAttemptId: null,
+      resolvedAnswer: '',
     }))
 
     topicId.current = forcedTopicId ?? selectTopicFromDomain(activeDomain, masteryRef.current)
@@ -119,7 +118,12 @@ export function useStudySession(
 
     const clampedDifficulty = Math.max(5, Math.min(10, currentDifficulty.current + difficultyOffset.current))
 
-    const accept = (q: Question, source: string) => {
+    const accept = (raw: Question, source: string) => {
+      // Re-place the correct option on a balanced cycle. Both sources park the
+      // answer in the same slot far too often — the model favours B, the
+      // offline bank was written with 24 of 32 answers at A — so placement is
+      // decided here rather than by whoever wrote the question.
+      const q = balanceOptions(raw)
       seenQuestions.current.add(q)
       previousQuestions.current.push(q.question.slice(0, 120))
       topicsUsed.current.add(q.topic_id)
@@ -221,22 +225,38 @@ export function useStudySession(
 
     let correct: boolean
     let aiFeedback = ''
+    let resolvedAnswer = currentQuestion.correct_answer
+    const topicName = getTopicById(currentQuestion.topic_id)?.name ?? currentQuestion.topic_id
 
-    if (currentQuestion.type === 'multiple_choice') {
-      // MC: instant string match — no API call needed
-      correct = checkAnswer(studentAnswer, currentQuestion.correct_answer)
-    } else {
-      // short_answer / numeric: AI evaluation accepts equivalent forms
+    const secondOpinion = async () => {
       setState(prev => ({ ...prev, evaluating: true }))
-      const topicName = getTopicById(currentQuestion.topic_id)?.name ?? currentQuestion.topic_id
-      const result = await evaluateAnswer({
+      return evaluateAnswer({
         question: currentQuestion.question,
         correctAnswer: currentQuestion.correct_answer,
         studentAnswer,
         topicName,
+        options: currentQuestion.options,
       })
-      correct = result.correct
-      aiFeedback = result.feedback
+    }
+
+    if (currentQuestion.type === 'multiple_choice') {
+      // MC: instant local match against the (now exact) option string.
+      correct = checkAnswer(studentAnswer, currentQuestion.correct_answer, currentQuestion.options)
+      if (!correct) {
+        // Only a losing answer costs an API call. The marker re-solves the
+        // question independently, so a generated answer key that is simply
+        // wrong can no longer mark a right answer wrong.
+        const verdict = await secondOpinion()
+        correct = verdict.correct
+        aiFeedback = verdict.feedback
+        resolvedAnswer = verdict.resolvedAnswer
+      }
+    } else {
+      // short_answer / numeric: always marked by the independent marker
+      const verdict = await secondOpinion()
+      correct = verdict.correct
+      aiFeedback = verdict.feedback
+      resolvedAnswer = verdict.resolvedAnswer
     }
 
     const xp = calculateXP(correct, currentQuestion.difficulty, hintUsed)
@@ -260,7 +280,9 @@ export function useStudySession(
       question_text: currentQuestion.question,
       question_type: currentQuestion.type,
       options: currentQuestion.options,
-      correct_answer: currentQuestion.correct_answer,
+      // Store the verified answer so the parent report never shows a key the
+      // marker itself rejected.
+      correct_answer: resolvedAnswer,
       student_answer: studentAnswer,
       is_correct: correct,
       difficulty: currentQuestion.difficulty,
@@ -288,6 +310,7 @@ export function useStudySession(
       answered: true,
       evaluating: false,
       aiFeedback,
+      resolvedAnswer,
       isCorrect: correct,
       xpEarned: xp,
       showXPFlash: correct,
