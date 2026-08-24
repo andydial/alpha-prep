@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle, XCircle, ArrowRight } from 'lucide-react'
+import { CheckCircle, XCircle, ArrowRight, AlertTriangle } from 'lucide-react'
 
 interface ExplanationPanelProps {
   isCorrect: boolean
@@ -7,6 +7,12 @@ interface ExplanationPanelProps {
   explanation: string
   hintUsed: boolean
   xpEarned: number
+  /** False when the independent marker could not be reached, so `correctAnswer`
+   *  is the generated key and has not been checked by anything. */
+  answerVerified?: boolean
+  /** True when the verified answer was not one of the four options offered —
+   *  the question itself was faulty and no choice could have been right. */
+  optionsFaulty?: boolean
   onNext: () => void
   onFlag?: () => void
 }
@@ -17,6 +23,8 @@ export function ExplanationPanel({
   explanation,
   hintUsed,
   xpEarned,
+  answerVerified = true,
+  optionsFaulty = false,
   onNext,
   onFlag,
 }: ExplanationPanelProps) {
@@ -66,6 +74,29 @@ export function ExplanationPanel({
         <div className="text-sm text-gray-300">
           <span className="text-gray-400">Correct answer: </span>
           <span className="font-semibold text-white">{correctAnswer}</span>
+        </div>
+      )}
+
+      {/* The answer shown above could not be checked, or the question was
+          faulty. Say so plainly rather than presenting it as settled — being
+          marked wrong against an unchecked key is what this warning exists to
+          prevent. */}
+      {!isCorrect && optionsFaulty && (
+        <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
+          <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-amber-200/90 text-xs leading-relaxed">
+            This question was faulty — the correct answer was not one of the four options,
+            so no choice could have been right. Flag it below to get your XP back.
+          </p>
+        </div>
+      )}
+      {!isCorrect && !optionsFaulty && !answerVerified && (
+        <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
+          <AlertTriangle size={15} className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-amber-200/90 text-xs leading-relaxed">
+            We could not double-check this answer just now, so treat it with caution.
+            If you are confident you were right, flag it below and your XP will be restored.
+          </p>
         </div>
       )}
 

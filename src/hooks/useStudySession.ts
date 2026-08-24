@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { generateQuestion, generateReadingSet, evaluateAnswer } from '../lib/anthropic'
+import { generateQuestion, generateReadingSet, evaluateAnswer, type AnswerVerdict } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
 import { SeenQuestions } from '../lib/questionDedup'
 import { balanceOptions, checkAnswer } from '../lib/answerCheck'
@@ -42,6 +42,11 @@ export interface StudySessionState {
   /** Answer to display after marking — the marker's own result when it
    *  disputed the generated key, otherwise the key itself. */
   resolvedAnswer: string
+  /** False when the independent marker could not be reached, so resolvedAnswer
+   *  is an unchecked generated key. */
+  answerVerified: boolean
+  /** True when the verified answer was not among the options offered. */
+  optionsFaulty: boolean
 }
 
 export function useStudySession(
@@ -73,6 +78,8 @@ export function useStudySession(
     showStreamTransition: false,
     currentAttemptId: null,
     resolvedAnswer: '',
+    answerVerified: true,
+    optionsFaulty: false,
   })
 
   // Mirror of latest state for async callbacks (e.g. flagging) that need fresh values
@@ -131,6 +138,8 @@ export function useStudySession(
       activeDomain,
       currentAttemptId: null,
       resolvedAnswer: '',
+      answerVerified: true,
+      optionsFaulty: false,
     }))
 
     const accept = (raw: Question, source: string) => {
@@ -370,6 +379,8 @@ export function useStudySession(
     let correct: boolean
     let aiFeedback = ''
     let resolvedAnswer = currentQuestion.correct_answer
+    let answerVerified = true
+    let optionsFaulty = false
     const topicName = getTopicById(currentQuestion.topic_id)?.name ?? currentQuestion.topic_id
 
     const secondOpinion = async () => {
@@ -394,6 +405,8 @@ export function useStudySession(
         correct = verdict.correct
         aiFeedback = verdict.feedback
         resolvedAnswer = verdict.resolvedAnswer
+        answerVerified = !verdict.markerUnavailable
+        optionsFaulty = isOptionsFaulty(verdict, currentQuestion)
       }
     } else {
       // short_answer / numeric: always marked by the independent marker
@@ -401,6 +414,8 @@ export function useStudySession(
       correct = verdict.correct
       aiFeedback = verdict.feedback
       resolvedAnswer = verdict.resolvedAnswer
+      answerVerified = !verdict.markerUnavailable
+      optionsFaulty = isOptionsFaulty(verdict, currentQuestion)
     }
 
     const xp = calculateXP(correct, currentQuestion.difficulty, hintUsed)
@@ -462,6 +477,8 @@ export function useStudySession(
       evaluating: false,
       aiFeedback,
       resolvedAnswer,
+      answerVerified,
+      optionsFaulty,
       isCorrect: correct,
       xpEarned: xp,
       showXPFlash: correct,
@@ -480,6 +497,19 @@ export function useStudySession(
    * is what the real paper does, and it is what makes a timed attempt worth
    * recording.
    */
+  /**
+   * True when the marker's own answer is not one of the options offered, which
+   * means the question was broken and no choice could have been right. Worth
+   * telling the student explicitly — being marked wrong on an impossible
+   * question is the thing that destroys trust in the app.
+   */
+  function isOptionsFaulty(verdict: AnswerVerdict, question: Question): boolean {
+    if (!verdict.keyDisputed || verdict.markerUnavailable) return false
+    const options = question.options ?? []
+    if (options.length === 0) return false
+    return !options.some(opt => checkAnswer(opt, verdict.resolvedAnswer, options))
+  }
+
   async function finishSession(opts?: { timedOut?: boolean }) {
     if (finished.current) return
     finished.current = true

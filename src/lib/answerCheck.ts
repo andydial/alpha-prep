@@ -179,7 +179,7 @@ export function balanceOptions(q: Question, rng: () => number = Math.random): Qu
 // ── Answer-key verification ─────────────────────────────────────────────────
 
 /** Every number in a block of text, including fractions and mixed numbers. */
-function numbersIn(text: string): number[] {
+export function numbersIn(text: string): number[] {
   const cleaned = text.replace(/[$£€]/g, '').replace(/,(?=\d{3}\b)/g, '')
   const tokens = cleaned.match(/-?\d+\s+\d+\s*\/\s*\d+|-?\d+\s*\/\s*\d+|-?\d*\.?\d+/g) ?? []
   return tokens
@@ -205,4 +205,135 @@ export function answerConsistentWithWorking(correctAnswer: string, working: stri
   if (workingNumbers.length === 0) return true
 
   return answerNumbers.every(a => workingNumbers.some(w => Math.abs(a - w) < 1e-6))
+}
+
+// ── Question integrity ──────────────────────────────────────────────────────
+
+/**
+ * Values a block of text explicitly declares to be the answer.
+ *
+ * `answerConsistentWithWorking` above only asks "does the key's number appear
+ * anywhere in the text?", and that is not enough. The question that reached
+ * Aarav had the key 87 and an explanation reading "the correct answer is 66 m²,
+ * so the answer is A) 87 m² is wrong" — 87 does appear, in the sentence saying
+ * it is wrong, so the old check passed it.
+ *
+ * This looks only at phrases that *assert* an answer, so a contradiction is
+ * detectable. Declarations framed as a mistake ("a common trap is to think the
+ * answer is 115") are skipped, since explanations legitimately discuss the
+ * distractors.
+ */
+const ANSWER_DECLARATION = /(?:correct\s+)?(?:answer|option|result)\s*(?:is|was|=|:)\s*/gi
+
+/** Words that mean the nearby declaration describes a wrong answer, not the answer. */
+const MISTAKE_FRAMING = /\b(mistake|mistaken|error|trap|slip|distractor|misread|misreads|incorrectly|if you|had you|thinking|assume|assumes|assuming|tempting|forget|forgets|forgot)\b/i
+
+export function declaredAnswers(text: string): number[] {
+  if (!text) return []
+  const out: number[] = []
+  ANSWER_DECLARATION.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ANSWER_DECLARATION.exec(text)) !== null) {
+    const before = text.slice(Math.max(0, match.index - 70), match.index)
+    if (MISTAKE_FRAMING.test(before)) continue
+    const after = text.slice(match.index + match[0].length, match.index + match[0].length + 40)
+    const value = numericValue(after)
+    if (value !== null) out.push(value)
+  }
+  return out
+}
+
+/**
+ * Does the text conclude an answer that disagrees with the key?
+ *
+ * Only fires on a definite numeric declaration, so a non-numeric answer or a
+ * text that never states a conclusion passes through untouched.
+ */
+export function contradictsDeclaredAnswer(correctAnswer: string, text: string): boolean {
+  const keyNumbers = numbersIn(stripLabel(correctAnswer ?? ''))
+  if (keyNumbers.length === 0) return false
+  const key = keyNumbers[0]
+  return declaredAnswers(text).some(d => Math.abs(d - key) > 1e-6)
+}
+
+/**
+ * Did the model visibly change its mind mid-answer?
+ *
+ * Aarav was shown "...= 66 m²... wait — let me recheck ... Correcting the
+ * options ... recalculating to ensure consistency". Even when the arithmetic
+ * happens to land right, this is not something a student should ever read, and
+ * it is a reliable signal that the answer key is untrustworthy.
+ *
+ * Patterns are deliberately narrow: "wait" and "hold on" only count when
+ * followed by punctuation, so an ordinary question about waiting for a bus does
+ * not trip it.
+ */
+const SELF_CORRECTION = new RegExp([
+  String.raw`\bwait\s*[—–\-,.:;!]`,
+  String.raw`\bhold on\s*[—–\-,.:;!]`,
+  String.raw`\bhmm+\b`,
+  String.raw`\boops\b`,
+  String.raw`let me (?:re)?(?:check|recheck|calculate|recalculate|compute|verify|reconsider|redo)`,
+  String.raw`\brecalculat(?:e|ing|ed)\b`,
+  String.raw`\bcorrecting the\b`,
+  String.raw`\bi made (?:a|an) (?:mistake|error)\b`,
+  String.raw`\bmy (?:mistake|error)\b`,
+  String.raw`\bapolog(?:y|ies|ise|ize|ising|izing)\b`,
+  String.raw`\bscratch that\b`,
+  String.raw`\bon second thought\b`,
+  String.raw`\bignore (?:the|my) (?:above|previous|earlier)\b`,
+  String.raw`\bactually,?\s+the (?:correct\s+)?answer\b`,
+  String.raw`\bstep \d+ revised\b`,
+  String.raw`\bthat(?:'s| is) (?:wrong|incorrect)\b`,
+].join('|'), 'i')
+
+export function hasSelfCorrection(text: string): boolean {
+  return !!text && SELF_CORRECTION.test(text)
+}
+
+/**
+ * Every reason a generated question must not be served, most specific first.
+ *
+ * Returns null when the question is safe. Callers regenerate on any defect —
+ * serving a question whose answer key cannot be trusted is worse than serving
+ * no question at all, because Aarav is marked against that key.
+ */
+export type QuestionDefect =
+  | 'NOT_MULTIPLE_CHOICE'
+  | 'WRONG_OPTION_COUNT'
+  | 'MC_OPTION_MISMATCH'
+  | 'EMPTY_WORKING'
+  | 'ANSWER_WORKING_MISMATCH'
+  | 'WORKING_CONTRADICTS_ANSWER'
+  | 'EXPLANATION_CONTRADICTS_ANSWER'
+  | 'SELF_CORRECTING_TEXT'
+
+export function findQuestionDefect(
+  q: Pick<Question, 'type' | 'options' | 'correct_answer' | 'explanation' | 'working'>,
+  opts: { requireMultipleChoice?: boolean } = {},
+): QuestionDefect | null {
+  const requireMC = opts.requireMultipleChoice ?? true
+
+  if (requireMC && q.type !== 'multiple_choice') return 'NOT_MULTIPLE_CHOICE'
+
+  if (q.type === 'multiple_choice') {
+    const options = q.options ?? []
+    if (options.length !== 4) return 'WRONG_OPTION_COUNT'
+    const answer = (q.correct_answer ?? '').trim()
+    if (!answer || !options.some(opt => checkAnswer(opt, answer, options))) {
+      return 'MC_OPTION_MISMATCH'
+    }
+  }
+
+  const working = q.working ?? ''
+  if (!working.trim()) return 'EMPTY_WORKING'
+  if (!answerConsistentWithWorking(q.correct_answer, working)) return 'ANSWER_WORKING_MISMATCH'
+  if (contradictsDeclaredAnswer(q.correct_answer, working)) return 'WORKING_CONTRADICTS_ANSWER'
+
+  const explanation = q.explanation ?? ''
+  if (contradictsDeclaredAnswer(q.correct_answer, explanation)) return 'EXPLANATION_CONTRADICTS_ANSWER'
+
+  if (hasSelfCorrection(working) || hasSelfCorrection(explanation)) return 'SELF_CORRECTING_TEXT'
+
+  return null
 }

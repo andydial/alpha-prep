@@ -172,6 +172,8 @@ export function Study() {
                     explanation={aiFeedback || currentQuestion!.explanation}
                     hintUsed={hintUsed}
                     xpEarned={xpEarned}
+                    answerVerified={state.answerVerified}
+                    optionsFaulty={state.optionsFaulty}
                     onNext={onNext}
                     onFlag={() => { void flagCurrentQuestion() }}
                   />

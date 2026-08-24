@@ -1,5 +1,5 @@
 import type { Domain, Question, WritingMark } from '../types'
-import { checkAnswer, answerConsistentWithWorking } from './answerCheck'
+import { checkAnswer, findQuestionDefect, type QuestionDefect } from './answerCheck'
 import { EXAM_CONTEXT, DOMAIN_GUIDANCE, TOPIC_GUIDANCE } from './examSpec'
 
 const SYSTEM_PROMPT = `You are an expert Australian tutor preparing Aarav, a high-achieving Year 6 student, for the EDSC Alpha (accelerated learning) entrance exam at East Doncaster Secondary College in Victoria. Aarav is near the top of his class and thrives on challenge — he should always feel stretched, never bored.
@@ -44,6 +44,9 @@ ANSWER CORRECTNESS — THIS MATTERS MORE THAN ANYTHING ELSE:
 - "correct_answer" must be the exact final result of your working. If they disagree, your working wins — go back and fix correct_answer.
 - A question whose stated answer contradicts its own working is worse than no question at all. Aarav is marked against this field.
 - For multiple_choice: exactly one option must equal correct_answer, and correct_answer must be copied verbatim from the options array. Every distractor must be genuinely incorrect — never two defensible answers.
+- BUILD THE OPTIONS AFTER YOU HAVE THE ANSWER. Solve first in "working", then write four options one of which IS your result. Never write plausible-looking options and then try to pick one.
+- The "explanation" must reach the SAME result as "working" and "correct_answer". If while writing the explanation you realise the answer is different, you have made an error — the whole question is void. Start the JSON again with the corrected answer and matching options rather than explaining your way out of it.
+- NEVER write a correction, a retraction or second thoughts into any field. No "wait", no "let me recheck", no "correcting the options", no "actually the answer is". Aarav reads the explanation verbatim; it must be a clean, confident explanation of one answer.
 
 OUTPUT FORMAT: Always respond with valid JSON only, no markdown, no preamble. Emit the fields in exactly the order given in the schema.`
 
@@ -62,6 +65,24 @@ const QUESTION_SCHEMA = `{
   "hint": "string — one sentence hint without giving away answer",
   "explanation": "string — clear explanation of why the answer is correct, 2-4 sentences"
 }`
+
+/**
+ * What to tell the model when a generated question is rejected.
+ *
+ * Retrying with the byte-identical request mostly reproduced the same defect.
+ * Naming the fault turns the second attempt into a correction rather than a
+ * coin flip.
+ */
+const DEFECT_FEEDBACK: Record<QuestionDefect, string> = {
+  NOT_MULTIPLE_CHOICE: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: it was not multiple choice. Every question on this paper is multiple choice with exactly four options.',
+  WRONG_OPTION_COUNT: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: it did not have exactly four options. Give exactly four, labelled "A) " to "D) ".',
+  MC_OPTION_MISMATCH: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: correct_answer did not appear in the options. Solve the question first, then build the four options around the result you got, and copy correct_answer verbatim from that option.',
+  EMPTY_WORKING: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: the "working" field was empty. Solve the question step by step in "working" before you write correct_answer.',
+  ANSWER_WORKING_MISMATCH: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: correct_answer was a value your own working never reached. The working is the truth — set correct_answer to the result the working ends with.',
+  WORKING_CONTRADICTS_ANSWER: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: the working stated a final answer different from correct_answer. Solve it once, carefully, and make every field agree.',
+  EXPLANATION_CONTRADICTS_ANSWER: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: the explanation concluded a different answer from correct_answer, and the options did not contain the real answer. Solve the question completely FIRST, then build the four options so that one of them is your result, and make working, correct_answer and explanation all state that same result.',
+  SELF_CORRECTING_TEXT: 'YOUR PREVIOUS ATTEMPT WAS REJECTED: the text contained second thoughts ("wait", "let me recheck", "correcting the options"). Work the problem out before you start writing. Every field must read as one clean, confident answer with no corrections.',
+}
 
 function parseQuestionJSON(text: string): Question {
   // Strip markdown code fences if present
@@ -101,18 +122,15 @@ ${alreadyAsked}
 
 Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
 
-  const body = {
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userContent }],
-  }
-
   let lastError: Error | null = null
+  let lastDefect: QuestionDefect | null = null
 
-  // Retry once on failure
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // Three attempts, and each retry is told what was wrong with the last one —
+  // repeating the identical request and hoping for a different answer wasted
+  // the retry most of the time.
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
+      const correction = lastDefect ? `\n\n${DEFECT_FEEDBACK[lastDefect]}` : ''
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -121,7 +139,12 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
           'anthropic-version': '2023-06-01',
           'anthropic-dangerous-direct-browser-access': 'true',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1400,
+          system: SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: userContent + correction }],
+        }),
       })
 
       if (!response.ok) {
@@ -138,56 +161,33 @@ Respond with JSON matching this schema: ${QUESTION_SCHEMA}`
       // Enforce difficulty floor
       if (question.difficulty < 5) question.difficulty = 5
 
-      // The paper is entirely multiple choice with four options. A short-answer
-      // item here is a generation miss, not a useful variation — regenerate
-      // rather than serve Aarav practice in a format he will not sit.
-      if (question.type !== 'multiple_choice') {
-        console.warn(`[generateQuestion] non-MC question for ${params.topicId} (type ${question.type})`)
-        throw new Error('NOT_MULTIPLE_CHOICE')
-      }
-      if ((question.options?.length ?? 0) !== 4) {
-        console.warn(`[generateQuestion] ${question.options?.length ?? 0} options for ${params.topicId}, expected 4`)
-        throw new Error('WRONG_OPTION_COUNT')
-      }
-
-      // Validate MC options actually contain the correct answer.
-      // A mismatch throws → the existing loop re-requests once, then falls back.
-      if (question.type === 'multiple_choice') {
-        const opts = question.options ?? []
-        const answer = (question.correct_answer ?? '').trim()
-        const hasMatch = answer.length > 0 && opts.some(opt => checkAnswer(opt, answer, opts))
-        if (!hasMatch) {
-          console.warn(
-            `[generateQuestion] MC correct_answer not in options (topic ${params.topicId}). ` +
-            `answer="${answer}" options=${JSON.stringify(opts)}`
-          )
-          throw new Error('MC_OPTION_MISMATCH')
-        }
-      }
-
-      // Reject any question whose stated answer does not follow from the
-      // working the model just showed. This is the guard against the "marked
-      // wrong for a right answer" failure — a bad key is caught before Aarav
-      // ever sees the question, and the loop regenerates.
-      if (!answerConsistentWithWorking(question.correct_answer, question.working ?? '')) {
+      // One gate for every way a generated question can be untrustworthy —
+      // wrong format, a key that matches no option, a key its own working or
+      // explanation contradicts, or text in which the model visibly changes its
+      // mind. See findQuestionDefect in answerCheck.ts. Aarav is marked against
+      // this key, so a defective question is regenerated rather than served.
+      const defect = findQuestionDefect(question)
+      if (defect) {
+        lastDefect = defect
         console.warn(
-          `[generateQuestion] answer/working mismatch (topic ${params.topicId}). ` +
-          `answer="${question.correct_answer}" working="${question.working}"`
+          `[generateQuestion] ${defect} (topic ${params.topicId}). ` +
+          `answer="${question.correct_answer}" options=${JSON.stringify(question.options)} ` +
+          `working="${(question.working ?? '').slice(0, 200)}"`
         )
-        throw new Error('ANSWER_WORKING_MISMATCH')
+        throw new Error(defect)
       }
 
       return question
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err))
-      if (attempt === 0) {
+      if (attempt < 2) {
         // Brief pause before retry
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise(resolve => setTimeout(resolve, 800))
       }
     }
   }
 
-  throw lastError ?? new Error('Failed to generate question after 2 attempts')
+  throw lastError ?? new Error('Failed to generate question after 3 attempts')
 }
 
 export interface AnswerVerdict {
@@ -198,6 +198,9 @@ export interface AnswerVerdict {
   resolvedAnswer: string
   /** True when the supplied answer key disagreed with the marker's own working. */
   keyDisputed: boolean
+  /** True when the marker could not be reached at all, so `resolvedAnswer` is
+   *  the unverified generated key rather than a checked result. */
+  markerUnavailable?: boolean
 }
 
 /**
@@ -216,11 +219,21 @@ export async function evaluateAnswer(params: {
   topicName: string
   options?: string[] | null
 }): Promise<AnswerVerdict> {
+  /**
+   * Last resort when the marker cannot be reached.
+   *
+   * This is the path that let a bad answer key reach Aarav: the marker failed,
+   * this returned the unverified key with empty feedback, and the UI showed the
+   * key as correct alongside the question's own rambling explanation — with
+   * nothing anywhere saying the marker had not run. `markerUnavailable` now
+   * makes that visible to the caller.
+   */
   const localFallback = (): AnswerVerdict => ({
     correct: checkAnswer(params.studentAnswer, params.correctAnswer, params.options),
     feedback: '',
     resolvedAnswer: params.correctAnswer,
     keyDisputed: false,
+    markerUnavailable: true,
   })
 
   const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
@@ -259,6 +272,10 @@ Feedback rules:
 Respond with JSON only, no markdown, fields in exactly this order:
 {"working": "your own step-by-step solution", "independent_answer": "your own final answer", "key_matches_working": true/false, "correct": true/false, "feedback": "1-2 encouraging sentences. If correct: briefly reinforce why. If not quite right: explain the gap gently, referencing what they wrote."}`
 
+  // Two attempts. A single try meant one truncated or rate-limited response
+  // silently handed Aarav the unverified key — measured output runs 430-600
+  // tokens, so the old 700 cap had almost no headroom on a verbose case.
+  for (let attempt = 0; attempt < 2; attempt++) {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -272,12 +289,16 @@ Respond with JSON only, no markdown, fields in exactly this order:
         // Sonnet, not Haiku: this call decides whether Aarav is told he got it
         // wrong. Marking accuracy is worth the extra second.
         model: 'claude-sonnet-4-6',
-        max_tokens: 700,
+        max_tokens: 1600,
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!response.ok) throw new Error('eval API error')
-    const data = await response.json() as { content: { type: string; text: string }[] }
+    if (!response.ok) throw new Error(`eval API ${response.status}`)
+    const data = await response.json() as {
+      content: { type: string; text: string }[]
+      stop_reason?: string
+    }
+    if (data.stop_reason === 'max_tokens') throw new Error('eval response truncated')
     const text = data.content.find(c => c.type === 'text')?.text ?? ''
     const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim()
     const parsed = JSON.parse(cleaned) as {
@@ -312,10 +333,19 @@ Respond with JSON only, no markdown, fields in exactly this order:
       feedback: parsed.feedback ?? '',
       resolvedAnswer: keyDisputed && independent ? independent : params.correctAnswer,
       keyDisputed,
+      markerUnavailable: false,
     }
-  } catch {
-    return localFallback()
+  } catch (err) {
+    console.error(`[evaluateAnswer] marking attempt ${attempt + 1} failed:`, err)
+    if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 600))
   }
+  }
+
+  console.error(
+    '[evaluateAnswer] marker unavailable after 2 attempts — falling back to the ' +
+    'unverified generated key. The answer shown to the student has NOT been checked.'
+  )
+  return localFallback()
 }
 
 export async function generateSessionSummary(params: {
@@ -463,11 +493,14 @@ Respond with JSON only, no markdown:
 
   const validIds = new Set(params.topicIds)
   const usable = (parsed.questions ?? []).filter(q => {
-    if (!q?.question || q.type !== 'multiple_choice') return false
-    const opts = q.options ?? []
-    if (opts.length !== 4) return false
-    const answer = (q.correct_answer ?? '').trim()
-    if (!answer || !opts.some(opt => checkAnswer(opt, answer, opts))) return false
+    if (!q?.question) return false
+    // Same integrity gate as generateQuestion — a reading question whose key
+    // its own explanation contradicts is exactly as dangerous as a maths one.
+    const defect = findQuestionDefect(q)
+    if (defect) {
+      console.warn(`[generateReadingSet] dropping question: ${defect} — "${q.question?.slice(0, 60)}"`)
+      return false
+    }
     return true
   }).map(q => ({
     ...q,
