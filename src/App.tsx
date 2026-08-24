@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Login } from './pages/Login'
 import { Study } from './pages/Study'
+import { WritingTask } from './pages/WritingTask'
 import { Results } from './pages/Results'
 import { Dashboard } from './pages/Dashboard'
 import { Progress } from './pages/Progress'
@@ -40,6 +41,14 @@ export default function App() {
           element={
             <AuthGuard requireRole="student">
               <AuthLayout><Study /></AuthLayout>
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/study/writing"
+          element={
+            <AuthGuard requireRole="student">
+              <AuthLayout><WritingTask /></AuthLayout>
             </AuthGuard>
           }
         />

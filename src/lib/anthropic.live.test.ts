@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { generateQuestion, evaluateAnswer } from './anthropic'
+import { generateQuestion, generateReadingSet, evaluateAnswer } from './anthropic'
 import { answerConsistentWithWorking, balanceOptions, checkAnswer } from './answerCheck'
+import type { Domain } from '../types'
 
 /**
  * Live checks against the real Anthropic API. Skipped by default — these cost
@@ -54,11 +55,15 @@ live('marking a question whose answer key is wrong', () => {
 })
 
 live('generated questions carry working that supports the answer', () => {
-  const topics = [
-    { topicId: 'maths_algebra', topicName: 'Algebra & Patterns' },
-    { topicId: 'maths_word_problems', topicName: 'Word Problems & Logic' },
-    { topicId: 'reading_inference', topicName: 'Inference & Deduction' },
-    { topicId: 'verbal_analogies', topicName: 'Word Analogies' },
+  // One topic from each of the four multiple-choice EduTest sections.
+  const topics: { topicId: string; topicName: string; domain: Domain }[] = [
+    { topicId: 'maths_algebra', topicName: 'Patterns & Algebra', domain: 'maths' },
+    { topicId: 'maths_word_problems', topicName: 'Multi-step Word Problems', domain: 'maths' },
+    { topicId: 'reading_inference', topicName: 'Inference & Deduction', domain: 'reading' },
+    { topicId: 'verbal_analogies', topicName: 'Word Analogies', domain: 'verbal' },
+    { topicId: 'verbal_logical_deduction', topicName: 'Logical Deduction', domain: 'verbal' },
+    { topicId: 'numerical_arithmetic', topicName: 'Arithmetic Reasoning & Worded Logic', domain: 'numerical' },
+    { topicId: 'abstract_sequences', topicName: 'Number & Letter Sequences', domain: 'numerical' },
   ]
 
   for (const t of topics) {
@@ -71,10 +76,41 @@ live('generated questions carry working that supports the answer', () => {
       })
       expect(q.working, 'model must show its working').toBeTruthy()
       expect(answerConsistentWithWorking(q.correct_answer, q.working ?? '')).toBe(true)
-      if (q.type === 'multiple_choice') {
-        const balanced = balanceOptions(q)
-        expect(balanced.options).toContain(balanced.correct_answer)
-      }
+      // The EduTest paper is multiple choice only — the generator rejects
+      // anything else, so a short-answer item here is a regression.
+      expect(q.type).toBe('multiple_choice')
+      expect(q.options).toHaveLength(4)
+      const balanced = balanceOptions(q)
+      expect(balanced.options).toContain(balanced.correct_answer)
     }, 90_000)
   }
+})
+
+live('reading comprehension comes as a passage with several questions on it', () => {
+  it('returns one shared passage and questions across different reading skills', async () => {
+    const topicIds = ['reading_main_idea', 'reading_inference', 'reading_vocabulary', 'reading_author_intent']
+    const set = await generateReadingSet({
+      topicIds,
+      topicNames: topicIds,
+      count: 4,
+      difficulty: 7,
+      weekNumber: 3,
+      previousQuestions: [],
+    })
+
+    expect(set.length).toBeGreaterThanOrEqual(2)
+    const passages = new Set(set.map(q => q.passage))
+    expect(passages.size, 'every question shares one passage').toBe(1)
+    expect([...passages][0]!.split(/\s+/).length).toBeGreaterThan(80)
+
+    for (const q of set) {
+      expect(q.type).toBe('multiple_choice')
+      expect(q.options).toHaveLength(4)
+      expect(topicIds).toContain(q.topic_id)
+      const balanced = balanceOptions(q)
+      expect(balanced.options).toContain(balanced.correct_answer)
+    }
+    // Different skills, not four rewordings of the same question.
+    expect(new Set(set.map(q => q.topic_id)).size).toBeGreaterThan(1)
+  }, 120_000)
 })

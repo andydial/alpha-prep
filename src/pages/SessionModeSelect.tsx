@@ -5,17 +5,19 @@ import { useUser } from '../hooks/useUser'
 import { useProgress } from '../hooks/useProgress'
 import { useWeeklyPlan } from '../hooks/useWeeklyPlan'
 import { useSettings } from '../hooks/useSettings'
-import { getSessionDomainPair, getTopicById, TOPICS, DOMAIN_NAMES } from '../lib/curriculum'
+import {
+  getSessionDomainPair, getTopicById, TOPICS, DOMAIN_NAMES, EXAM_DOMAINS,
+} from '../lib/curriculum'
+import { sessionTimeLimitSeconds, writingTimeLimitSeconds, formatClock } from '../lib/sessionTimer'
 import type { Domain, SessionConfig, SessionMode } from '../types'
 
-const EXAM_DOMAINS: Domain[] = ['maths', 'reading', 'verbal', 'abstract']
-
 const DOMAIN_COLOUR: Record<Domain, string> = {
-  maths:    'border-blue-500/50 bg-blue-500/10 text-blue-300',
-  reading:  'border-purple-500/50 bg-purple-500/10 text-purple-300',
-  verbal:   'border-amber-500/50 bg-amber-500/10 text-amber-300',
-  abstract: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-300',
-  writing:  'border-green-500/50 bg-green-500/10 text-green-300',
+  maths:     'border-blue-500/50 bg-blue-500/10 text-blue-300',
+  reading:   'border-purple-500/50 bg-purple-500/10 text-purple-300',
+  verbal:    'border-amber-500/50 bg-amber-500/10 text-amber-300',
+  numerical: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300',
+  abstract:  'border-cyan-500/50 bg-cyan-500/10 text-cyan-300',
+  writing:   'border-green-500/50 bg-green-500/10 text-green-300',
 }
 
 interface SessionModeSelectProps {
@@ -42,6 +44,16 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
   const secondaryTopic = plan?.secondary_topic_id ? getTopicById(plan.secondary_topic_id) : null
 
   const drillTopics = drillDomain ? TOPICS.filter(t => t.domain === drillDomain && t.active) : []
+
+  // Badge text for a mode card: question count plus the clock, so it is obvious
+  // before starting how long the test will run — or that it is untimed.
+  const badgeFor = (questions: number) => {
+    const limit = sessionTimeLimitSeconds(questions, settings)
+    return limit === null
+      ? `${questions} questions · untimed`
+      : `${questions} questions · ${formatClock(limit)}`
+  }
+  const writingLimit = writingTimeLimitSeconds(settings)
 
   const canStart =
     mode === 'planned' ||
@@ -71,7 +83,7 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
   const startLabel = (() => {
     if (mode === 'quick') return 'Start — Quick 10 Questions'
     if (mode === 'planned') return `Start — ${plannedQuestions} Questions`
-    if (mode === 'domain') return selectedDomain ? `Start — ${DOMAIN_NAMES[selectedDomain]}` : 'Select a subject'
+    if (mode === 'domain') return selectedDomain ? `Start — ${DOMAIN_NAMES[selectedDomain]}` : 'Select an exam section'
     return selectedTopicId ? `Start — ${getTopicById(selectedTopicId)?.name ?? 'Topic'}` : 'Select a topic'
   })()
 
@@ -88,7 +100,11 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
         </button>
         <div>
           <h1 className="text-white font-bold text-xl leading-tight">Choose Session Type</h1>
-          <p className="text-gray-400 text-sm">Pick how you want to study today</p>
+          <p className="text-gray-400 text-sm">
+            {settings.timer_enabled === 'false'
+              ? 'Timing is off — take as long as you need'
+              : 'Every test is timed, like the real paper'}
+          </p>
         </div>
       </div>
 
@@ -101,7 +117,7 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
           onClick={() => selectMode('quick')}
           label="Quick Session"
           subtext="Fast 10-question review — ideal when time is short"
-          badge="10 questions"
+          badge={badgeFor(10)}
         />
 
         {/* Planned Session */}
@@ -109,8 +125,10 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
           selected={mode === 'planned'}
           onClick={() => selectMode('planned')}
           label="Planned Session"
-          subtext="Follow this week's study plan"
-          badge={`${dataLoading ? '—' : plannedQuestions} questions`}
+          subtext={dataLoading
+            ? "Follow this week's study plan"
+            : `${DOMAIN_NAMES[plannedPair[0]]} + ${DOMAIN_NAMES[plannedPair[1]]} — this week's plan`}
+          badge={dataLoading ? '—' : badgeFor(plannedQuestions)}
         >
           {dataLoading ? (
             <div className="mt-2 pl-6 space-y-1.5">
@@ -133,9 +151,9 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
         <ModeCard
           selected={mode === 'domain'}
           onClick={() => selectMode('domain')}
-          label="Domain Focus"
-          subtext="Practise one subject area"
-          badge="20 questions"
+          label="Exam Section Focus"
+          subtext="Practise one section of the paper"
+          badge={badgeFor(20)}
         >
           {mode === 'domain' && (
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -164,7 +182,7 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
           onClick={() => selectMode('topic')}
           label="Topic Drill"
           subtext="Deep dive into one specific topic"
-          badge="15 questions"
+          badge={badgeFor(15)}
         >
           {mode === 'topic' && (
             <div className="mt-3 space-y-3">
@@ -207,6 +225,19 @@ export function SessionModeSelect({ onConfirm }: SessionModeSelectProps) {
               )}
             </div>
           )}
+        </ModeCard>
+
+        {/* Written Expression — its own timed task, not a question-per-slot session */}
+        <ModeCard
+          selected={false}
+          onClick={() => navigate('/study/writing')}
+          label="Written Expression"
+          subtext="One writing task, marked against the EduTest rubric"
+          badge={writingLimit === null ? '1 task · untimed' : `1 task · ${formatClock(writingLimit)}`}
+        >
+          <p className="mt-2 pl-6 text-gray-500 text-xs">
+            Narrative or persuasive, no planning time — exactly as the paper runs it.
+          </p>
         </ModeCard>
       </div>
 

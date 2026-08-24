@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useUser } from '../hooks/useUser'
+import { useSettings } from '../hooks/useSettings'
 import { useStudySession } from '../hooks/useStudySession'
+import { useCountdown } from '../hooks/useCountdown'
+import { sessionTimeLimitSeconds } from '../lib/sessionTimer'
 import { QuestionCard } from '../components/QuestionCard'
 import { AnswerInput } from '../components/AnswerInput'
 import { ExplanationPanel } from '../components/ExplanationPanel'
 import { XPFlash } from '../components/XPFlash'
+import { SessionTimer } from '../components/SessionTimer'
 import { SessionStreamBanner } from '../components/SessionStreamBanner'
 import { StreamTransitionScreen } from '../components/StreamTransitionScreen'
 import { SessionModeSelect } from './SessionModeSelect'
@@ -15,18 +19,24 @@ import type { DomainPair, SessionConfig } from '../types'
 export function Study() {
   const navigate = useNavigate()
   const { user } = useUser()
+  const { settings, loading: settingsLoading } = useSettings()
 
   const [config, setConfig] = useState<SessionConfig | null>(null)
   const [showExitModal, setShowExitModal] = useState(false)
+  const [timeUp, setTimeUp] = useState(false)
 
   const domainPair: DomainPair = config?.domainPair ?? ['maths', 'verbal']
   const totalQuestions = config?.totalQuestions ?? 40
   const forcedTopicId = config?.forcedTopicId
 
+  // Null when the parent has switched timed tests off in Settings.
+  const timeLimitSeconds = config ? sessionTimeLimitSeconds(totalQuestions, settings) : null
+
   const {
     state, initSession, handleAnswer, handleNext,
-    setHintUsed, dismissTransition, finishSession, flagCurrentQuestion, QUESTIONS_PER_SESSION,
-  } = useStudySession(user, null, domainPair, totalQuestions, forcedTopicId)
+    setHintUsed, dismissTransition, finishSession, flagCurrentQuestion,
+    QUESTIONS_PER_SESSION, questionsPerBlock,
+  } = useStudySession(user, null, domainPair, totalQuestions, forcedTopicId, timeLimitSeconds)
 
   const {
     currentQuestion, answered, evaluating, aiFeedback, isCorrect, xpEarned,
@@ -34,10 +44,24 @@ export function Study() {
     showStreamTransition,
   } = state
 
+  // Guarded so a double-fire of the countdown cannot write two result payloads.
+  const expiring = useRef(false)
+  async function handleTimeUp() {
+    if (expiring.current) return
+    expiring.current = true
+    setTimeUp(true)
+    await finishSession({ timedOut: true })
+    navigate('/study/results')
+  }
+
+  const { remaining, start: startTimer } = useCountdown(timeLimitSeconds, () => { void handleTimeUp() })
+
   useEffect(() => {
-    if (user && config) void initSession()
+    if (!user || !config || settingsLoading) return
+    void initSession()
+    startTimer()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, config])
+  }, [user, config, settingsLoading])
 
   if (!config) {
     return <SessionModeSelect onConfirm={setConfig} />
@@ -53,6 +77,15 @@ export function Study() {
     await finishSession()
     navigate('/dashboard')
   }
+
+  if (timeUp) return (
+    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
+      <div className="flex flex-col items-center gap-4 py-20">
+        <Loader2 size={28} className="text-amber-400 animate-spin" />
+        <p className="text-amber-300 font-semibold">Time's up — marking your test…</p>
+      </div>
+    </div>
+  )
 
   if (error) return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
@@ -90,6 +123,7 @@ export function Study() {
                   questionNumber={questionNumber}
                 />
               </div>
+              <SessionTimer remaining={remaining} total={timeLimitSeconds} />
               <button
                 onClick={() => setShowExitModal(true)}
                 className="flex-shrink-0 text-xs text-gray-600 hover:text-gray-400 px-2 py-1.5 rounded-lg hover:bg-gray-800/60 transition-colors"
@@ -102,7 +136,8 @@ export function Study() {
               <StreamTransitionScreen
                 domainPair={state.domainPair}
                 correctCount={state.correctCount}
-                questionsInBlock={QUESTIONS_PER_SESSION / 2}
+                questionsInBlock={questionsPerBlock}
+                timed={timeLimitSeconds !== null}
                 onContinue={dismissTransition}
               />
             ) : loading ? (

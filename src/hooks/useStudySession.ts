@@ -1,20 +1,23 @@
 import { useState, useRef, useCallback } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { generateQuestion, evaluateAnswer } from '../lib/anthropic'
+import { generateQuestion, generateReadingSet, evaluateAnswer } from '../lib/anthropic'
 import { getFallbackQuestion } from '../lib/fallbackQuestions'
 import { SeenQuestions } from '../lib/questionDedup'
 import { balanceOptions, checkAnswer } from '../lib/answerCheck'
 import {
-  getTopicById,
-  getInitialDifficulty, getNextDifficulty, calculateXP, getWeekNumber,
-  selectTopicFromDomain,
+  getTopicById, examTopicsForDomain,
+  adaptiveDelta, calculateXP, getWeekNumber,
 } from '../lib/curriculum'
+import { getDifficultyBand } from '../lib/examSpec'
+import { buildBlueprint, type AttemptSignal, type Slot } from '../lib/weakness'
+import { parseExamDate } from '../lib/examDate'
 import { runSessionEnd } from '../lib/sessionEnd'
 import type { Question, Mastery, WeeklyPlan, Domain, DomainPair } from '../types'
 
-const EXAM_DATE = new Date('2026-08-14')
-const DIFFICULTY_DEFAULT = 6
+/** How far back to look for the recent form that drives weakness ranking. */
+const RECENT_WINDOW_DAYS = 21
+const RECENT_ATTEMPT_LIMIT = 300
 
 
 export interface StudySessionState {
@@ -47,6 +50,8 @@ export function useStudySession(
   domainPair: DomainPair,
   totalQuestions = 40,
   forcedTopicId?: string,
+  /** Whole-test limit in seconds, or null when the parent has timing off. */
+  timeLimitSeconds: number | null = null,
 ) {
   const [state, setState] = useState<StudySessionState>({
     sessionId: null,
@@ -82,7 +87,6 @@ export function useStudySession(
   const seenQuestions = useRef(new SeenQuestions())
   const aiFailures = useRef(0)
   const recentResults = useRef<boolean[]>([])
-  const currentDifficulty = useRef(DIFFICULTY_DEFAULT)
   const topicId = useRef('maths_fractions')
   const masteryRef = useRef<Mastery[]>([])
   const topicsUsed = useRef<Set<string>>(new Set())
@@ -91,11 +95,28 @@ export function useStudySession(
   const correctCountRef = useRef(0)
   const totalXPRef = useRef(0)
   const allAttempts = useRef<{ topicId: string; isCorrect: boolean; difficulty: number; timeTaken: number }[]>([])
-  const streamBoundary = useRef(20) // questions 1-20 = block 1; 21-40 = block 2
+  // Half the session per domain. This used to be hardcoded to 20, so any
+  // session shorter than 40 questions never reached its second domain at all.
+  const streamBoundary = useRef(Math.ceil(totalQuestions / 2))
   const difficultyOffset = useRef(0) // parent-configurable offset from settings table
+  const examDate = useRef(parseExamDate(null))
+
+  // The whole session, planned before the first question is asked: which topic
+  // each slot draws from, at what difficulty, and which slots are the stretch
+  // ones. See src/lib/weakness.ts for how the shape is decided.
+  const blueprint = useRef<Slot[]>([])
+  // Topic IDs that actually exist in Supabase. attempts.topic_id has a foreign
+  // key to public.topics, so the EduTest topics added by
+  // db/migrate_edutest_alignment.sql must be filtered out until it has been
+  // run. null means the list could not be read — then nothing is filtered.
+  const validTopicIds = useRef<Set<string> | null>(null)
+  // Reading comprehension arrives as a passage plus several questions. The
+  // extras wait here so the passage is only generated once per set.
+  const questionQueue = useRef<Question[]>([])
+  const finished = useRef(false)
 
   const fetchNextQuestion = useCallback(async (questionNum: number) => {
-    // Determine which stream domain based on question number
+    // Which half of the session we are in — block 1 is domainPair[0].
     const activeDomain = questionNum <= streamBoundary.current
       ? domainPair[0]
       : domainPair[1]
@@ -112,34 +133,95 @@ export function useStudySession(
       resolvedAnswer: '',
     }))
 
-    topicId.current = forcedTopicId ?? selectTopicFromDomain(activeDomain, masteryRef.current)
-    const topic = getTopicById(topicId.current)
-    const weekNum = getWeekNumber(EXAM_DATE)
-
-    const clampedDifficulty = Math.max(5, Math.min(10, currentDifficulty.current + difficultyOffset.current))
-
     const accept = (raw: Question, source: string) => {
       // Re-place the correct option on a balanced cycle. Both sources park the
       // answer in the same slot far too often — the model favours B, the
-      // offline bank was written with 24 of 32 answers at A — so placement is
+      // offline bank was written with most answers at A — so placement is
       // decided here rather than by whoever wrote the question.
       const q = balanceOptions(raw)
       seenQuestions.current.add(q)
       previousQuestions.current.push(q.question.slice(0, 120))
       topicsUsed.current.add(q.topic_id)
+      topicId.current = q.topic_id
       questionStartTime.current = Date.now()
       console.log(`[fetchNextQuestion] Q#${questionNum} from ${source} (${seenQuestions.current.size} unique so far)`)
       setState(prev => ({ ...prev, currentQuestion: q, loading: false }))
     }
 
+    // A reading set generated earlier still has questions on its passage.
+    const queued = questionQueue.current.shift()
+    if (queued && !seenQuestions.current.has(queued)) {
+      accept(queued, 'reading set')
+      return
+    }
+
+    const slot = blueprint.current[questionNum - 1]
+    const plannedTopic = slot?.topicId
+      ?? forcedTopicId
+      ?? examTopicsForDomain(activeDomain, validTopicIds.current)[0]
+    topicId.current = plannedTopic
+
+    // The blueprint owns the exam-level mix; adaptiveDelta leans one step
+    // either way on recent form. The parent's offset is already baked into the
+    // band, so it must not be applied a second time here.
+    const difficulty = Math.max(5, Math.min(10,
+      (slot?.difficulty ?? 6) + adaptiveDelta(recentResults.current),
+    ))
+    const weekNum = getWeekNumber(examDate.current)
+
+    // Reading comprehension comes as a passage with several questions on it,
+    // the way the paper does. Generate the set once and queue the rest.
+    if (getTopicById(plannedTopic)?.domain === 'reading') {
+      let runLength = 1
+      while (
+        runLength < 4 &&
+        getTopicById(blueprint.current[questionNum - 1 + runLength]?.topicId ?? '')?.domain === 'reading'
+      ) runLength++
+
+      if (runLength >= 2) {
+        try {
+          const setTopicIds = blueprint.current
+            .slice(questionNum - 1, questionNum - 1 + runLength)
+            .map(sl => sl.topicId)
+          const set = await generateReadingSet({
+            topicIds: [...new Set(setTopicIds)],
+            topicNames: [...new Set(setTopicIds)].map(id => getTopicById(id)?.name ?? id),
+            count: runLength,
+            difficulty,
+            weekNumber: weekNum,
+            previousQuestions: previousQuestions.current,
+          })
+          const fresh = set.filter(q => !seenQuestions.current.has(q))
+          if (fresh.length > 0) {
+            aiFailures.current = 0
+            questionQueue.current = fresh.slice(1)
+            accept(fresh[0], `reading set of ${fresh.length}`)
+            return
+          }
+        } catch (err) {
+          console.error('[fetchNextQuestion] reading set failed, falling back to single question:', err)
+        }
+      }
+    }
+
     // Ask the AI, rejecting any question the session has already served. A
-    // duplicate is retried rather than shown — up to 3 attempts.
+    // duplicate is retried against a different topic in the same block rather
+    // than shown — up to 3 attempts.
+    const blockTopics = forcedTopicId
+      ? [forcedTopicId]
+      : examTopicsForDomain(activeDomain, validTopicIds.current)
+
     for (let attempt = 0; attempt < 3; attempt++) {
+      const attemptTopic = attempt === 0
+        ? plannedTopic
+        : blockTopics[Math.floor(Math.random() * blockTopics.length)]
+      const topic = getTopicById(attemptTopic)
       try {
         const q = await generateQuestion({
-          topicId: topicId.current,
-          topicName: topic?.name ?? topicId.current,
-          difficulty: clampedDifficulty,
+          topicId: attemptTopic,
+          topicName: topic?.name ?? attemptTopic,
+          domain: topic?.domain ?? activeDomain,
+          difficulty,
           previousQuestions: previousQuestions.current,
           weekNumber: weekNum,
         })
@@ -148,7 +230,7 @@ export function useStudySession(
           continue
         }
         aiFailures.current = 0
-        accept(q, 'AI')
+        accept({ ...q, topic_id: attemptTopic }, 'AI')
         return
       } catch (err) {
         aiFailures.current += 1
@@ -160,7 +242,7 @@ export function useStudySession(
     // AI unavailable or repeating — fall back to the offline bank, still
     // excluding everything already served this session.
     const fallback = getFallbackQuestion(
-      topicId.current,
+      plannedTopic,
       new Set(seenQuestions.current.toArray()),
     )
     if (fallback) {
@@ -177,7 +259,7 @@ export function useStudySession(
         ? 'Question generation is unavailable and the offline backup questions are used up. Check the Anthropic API key and credit balance, then start a new session.'
         : 'Ran out of new questions for this session. Please start a new session.',
     }))
-  }, [domainPair])
+  }, [domainPair, forcedTopicId])
 
   async function initSession() {
     if (sessionStarted.current) return
@@ -185,25 +267,76 @@ export function useStudySession(
     sessionStarted.current = true
     previousQuestions.current = []  // fresh dedup list for this session
     seenQuestions.current.clear()
+    questionQueue.current = []
     aiFailures.current = 0
+    finished.current = false
     try {
-      const [{ data: mastery }, { data: offsetData }] = await Promise.all([
+      const since = new Date(Date.now() - RECENT_WINDOW_DAYS * 86400000).toISOString()
+      const [
+        { data: mastery },
+        { data: settingsRows },
+        { data: topicRows },
+        { data: recentRows },
+      ] = await Promise.all([
         supabase.from('mastery').select('*').eq('student_id', user.id),
-        supabase.from('settings').select('value').eq('key', 'difficulty_offset').single(),
+        supabase.from('settings').select('key, value'),
+        supabase.from('topics').select('id'),
+        supabase.from('attempts')
+          .select('topic_id, is_correct')
+          .eq('student_id', user.id)
+          .gte('attempted_at', since)
+          .order('attempted_at', { ascending: false })
+          .limit(RECENT_ATTEMPT_LIMIT),
       ])
-      masteryRef.current = mastery ?? []
-      difficultyOffset.current = parseInt(offsetData?.value ?? '0', 10) || 0
 
-      // Initialise difficulty from first domain's representative topic
-      const firstTopic = getTopicById(selectTopicFromDomain(domainPair[0], mastery ?? []))
-      currentDifficulty.current = getInitialDifficulty(firstTopic?.difficulty_base ?? DIFFICULTY_DEFAULT)
+      masteryRef.current = mastery ?? []
+      const settings: Record<string, string> = {}
+      for (const row of settingsRows ?? []) settings[row.key] = row.value
+      difficultyOffset.current = parseInt(settings.difficulty_offset ?? '0', 10) || 0
+      examDate.current = parseExamDate(settings.exam_date)
+      validTopicIds.current = topicRows && topicRows.length > 0
+        ? new Set(topicRows.map(t => t.id as string))
+        : null
+
+      const recent: AttemptSignal[] = (recentRows ?? []).map(r => ({
+        topic_id: r.topic_id as string,
+        is_correct: r.is_correct as boolean | null,
+      }))
+
+      // Plan the whole session before the first question is asked, one block
+      // per domain, so topic coverage and weakness drilling are guaranteed
+      // rather than left to a per-question dice roll.
+      const weekNum = getWeekNumber(examDate.current)
+      const band = getDifficultyBand(weekNum, difficultyOffset.current)
+      const half = Math.ceil(totalQuestions / 2)
+      streamBoundary.current = half
+
+      const topicsFor = (domain: Domain) =>
+        forcedTopicId ? [forcedTopicId] : examTopicsForDomain(domain, validTopicIds.current)
+
+      blueprint.current = [
+        ...buildBlueprint({
+          topicIds: topicsFor(domainPair[0]),
+          count: half,
+          band,
+          mastery: masteryRef.current,
+          recent,
+        }),
+        ...buildBlueprint({
+          topicIds: topicsFor(domainPair[1]),
+          count: totalQuestions - half,
+          band,
+          mastery: masteryRef.current,
+          recent,
+        }),
+      ]
+
       sessionStartTime.current = Date.now()
 
-      const weekNum = getWeekNumber(EXAM_DATE)
       const { data: sessionData, error: sessionError } = await supabase
         .from('sessions').insert({
           student_id: user.id,
-          session_type: totalQuestions < 40 ? 'test' : 'practice',
+          session_type: sessionType(),
           week_number: weekNum,
         })
         .select().single()
@@ -217,6 +350,17 @@ export function useStudySession(
       console.error(err)
       setState(prev => ({ ...prev, error: 'Could not start session. Please try again.', loading: false }))
     }
+  }
+
+  /**
+   * The session_type column was previously written as
+   * `totalQuestions < 40 ? 'test' : 'practice'`, which tagged every quick,
+   * domain and drill session as a test and produced a value ('test') that is
+   * not even in the column's own vocabulary.
+   */
+  function sessionType(): 'practice' | 'timed_test' | 'drill' {
+    if (forcedTopicId) return 'drill'
+    return timeLimitSeconds !== null ? 'timed_test' : 'practice'
   }
 
   async function handleAnswer(studentAnswer: string, currentQuestion: Question) {
@@ -271,8 +415,6 @@ export function useStudySession(
       difficulty: currentQuestion.difficulty,
       timeTaken,
     })
-    currentDifficulty.current = getNextDifficulty(currentDifficulty.current, recentResults.current)
-
     const baseAttempt = {
       session_id: sessionIdRef.current,
       student_id: user.id,
@@ -320,21 +462,40 @@ export function useStudySession(
     if (correct) setTimeout(() => setState(prev => ({ ...prev, showXPFlash: false })), 1600)
   }
 
-  async function finishSession() {
+  /**
+   * Ends the session and writes the score.
+   *
+   * When `timedOut` is true the countdown expired: the test is marked exactly
+   * where it stood, so `correct_count` is scored against the *planned*
+   * total_questions and the questions he never reached count against him. That
+   * is what the real paper does, and it is what makes a timed attempt worth
+   * recording.
+   */
+  async function finishSession(opts?: { timedOut?: boolean }) {
+    if (finished.current) return
+    finished.current = true
+    const timedOut = opts?.timedOut ?? false
     const durationSeconds = Math.round((Date.now() - sessionStartTime.current) / 1000)
+    const answeredCount = allAttempts.current.length
+
     if (sessionIdRef.current) {
       const coreUpdate = {
         completed_at: new Date().toISOString(),
         total_questions: totalQuestions,
         correct_count: correctCountRef.current,
         duration_seconds: durationSeconds,
+        session_type: sessionType(),
       }
-      let { error: sessionUpdateError } = await supabase.from('sessions').update({
+      const fullUpdate = {
         ...coreUpdate,
         xp_earned: totalXPRef.current,
-      }).eq('id', sessionIdRef.current)
+        time_limit_seconds: timeLimitSeconds,
+        timed_out: timedOut,
+      }
+      let { error: sessionUpdateError } = await supabase.from('sessions')
+        .update(fullUpdate).eq('id', sessionIdRef.current)
       if (sessionUpdateError?.code === '42703') {
-        // xp_earned column not yet migrated — update without it
+        // Timer / xp columns not yet migrated — retry with the core fields only.
         ;({ error: sessionUpdateError } = await supabase.from('sessions').update(coreUpdate).eq('id', sessionIdRef.current))
       }
       if (sessionUpdateError) console.error('[finishSession] session update failed:', sessionUpdateError)
@@ -354,6 +515,8 @@ export function useStudySession(
       leveledUp: false,
       newStreak: 1,
       badgesEarned: [],
+      timedOut,
+      answeredCount,
     }
 
     if (user && sessionIdRef.current) {
@@ -436,5 +599,10 @@ export function useStudySession(
     }
   }
 
-  return { state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition, finishSession, flagCurrentQuestion, QUESTIONS_PER_SESSION: totalQuestions }
+  return {
+    state, initSession, handleAnswer, handleNext, setHintUsed, dismissTransition,
+    finishSession, flagCurrentQuestion,
+    QUESTIONS_PER_SESSION: totalQuestions,
+    questionsPerBlock: streamBoundary.current,
+  }
 }

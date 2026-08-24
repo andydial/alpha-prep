@@ -13,12 +13,12 @@
 import { useState } from 'react'
 import { useUser } from '../hooks/useUser'
 import { useParentReport } from '../hooks/useParentReport'
+import { useSettings } from '../hooks/useSettings'
+import { parseExamDate } from '../lib/examDate'
 import { getDaysUntilExam, getWeekNumber } from '../lib/curriculum'
 import { formatDuration } from '../lib/formatters'
 import { SessionList } from '../components/parent/SessionList'
 import { OverallProgress } from '../components/parent/OverallProgress'
-
-const EXAM_DATE = new Date('2026-08-14')
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
@@ -41,10 +41,12 @@ function StatTile({ label, value, sub }: { label: string; value: string; sub?: s
 export function ParentReport() {
   const { user, profile } = useUser()
   const { sessions, mastery, badges, attemptsBlocked, loading } = useParentReport(user?.id)
+  const { settings } = useSettings()
   const [showProgress, setShowProgress] = useState(false)
 
-  const daysLeft = getDaysUntilExam(EXAM_DATE)
-  const weekNumber = getWeekNumber(EXAM_DATE)
+  const examDate = parseExamDate(settings.exam_date)
+  const daysLeft = getDaysUntilExam(examDate)
+  const weekNumber = getWeekNumber(examDate)
 
   const totalQuestions = sessions.reduce((n, s) => n + s.attempted, 0)
   const totalCorrect = sessions.reduce((n, s) => n + s.correct, 0)

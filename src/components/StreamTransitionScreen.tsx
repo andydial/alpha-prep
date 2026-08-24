@@ -5,6 +5,8 @@ interface StreamTransitionScreenProps {
   domainPair: DomainPair
   correctCount: number
   questionsInBlock: number
+  /** True when the session has a countdown — it keeps running through here. */
+  timed?: boolean
   onContinue: () => void
 }
 
@@ -12,6 +14,7 @@ export function StreamTransitionScreen({
   domainPair,
   correctCount,
   questionsInBlock,
+  timed = false,
   onContinue,
 }: StreamTransitionScreenProps) {
   const [, d2] = domainPair
@@ -46,6 +49,11 @@ export function StreamTransitionScreen({
       <div className="space-y-1">
         <p className="text-gray-400 text-sm">Now starting Block 2</p>
         <p className="text-white text-lg font-semibold">{DOMAIN_NAMES[d2]}</p>
+        {timed && (
+          <p className="text-amber-400/80 text-xs pt-1">
+            The clock is still running — the exam does not pause between sections.
+          </p>
+        )}
       </div>
 
       <button

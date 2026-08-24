@@ -16,11 +16,12 @@ export function SessionStreamBanner({
   const isD1Active = activeDomain === d1
 
   const DOMAIN_COLOUR: Record<Domain, string> = {
-    maths:    'text-blue-400 bg-blue-500/15 border-blue-500/30',
-    reading:  'text-purple-400 bg-purple-500/15 border-purple-500/30',
-    verbal:   'text-amber-400 bg-amber-500/15 border-amber-500/30',
-    abstract: 'text-cyan-400 bg-cyan-500/15 border-cyan-500/30',
-    writing:  'text-green-400 bg-green-500/15 border-green-500/30',
+    maths:     'text-blue-400 bg-blue-500/15 border-blue-500/30',
+    reading:   'text-purple-400 bg-purple-500/15 border-purple-500/30',
+    verbal:    'text-amber-400 bg-amber-500/15 border-amber-500/30',
+    numerical: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
+    abstract:  'text-cyan-400 bg-cyan-500/15 border-cyan-500/30',
+    writing:   'text-green-400 bg-green-500/15 border-green-500/30',
   }
 
   return (

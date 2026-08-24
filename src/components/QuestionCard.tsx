@@ -8,11 +8,12 @@ interface QuestionCardProps {
 }
 
 const DOMAIN_COLOURS: Record<string, string> = {
-  maths:    'text-blue-400 bg-blue-500/10 border-blue-500/30',
-  reading:  'text-purple-400 bg-purple-500/10 border-purple-500/30',
-  verbal:   'text-amber-400 bg-amber-500/10 border-amber-500/30',
-  abstract: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
-  writing:  'text-green-400 bg-green-500/10 border-green-500/30',
+  maths:     'text-blue-400 bg-blue-500/10 border-blue-500/30',
+  reading:   'text-purple-400 bg-purple-500/10 border-purple-500/30',
+  verbal:    'text-amber-400 bg-amber-500/10 border-amber-500/30',
+  numerical: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+  abstract:  'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+  writing:   'text-green-400 bg-green-500/10 border-green-500/30',
 }
 
 function difficultyColour(d: number): string {
@@ -54,6 +55,19 @@ export function QuestionCard({ question, questionNumber, totalQuestions }: Quest
           style={{ width: `${Math.round(progress * 100)}%` } as React.CSSProperties}
         />
       </div>
+
+      {/* Reading passage — several questions in a set share one passage,
+          the way they do on the paper. */}
+      {question.passage && (
+        <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-4 max-h-72 overflow-y-auto">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-600 mb-2">
+            Passage
+          </p>
+          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+            {question.passage}
+          </p>
+        </div>
+      )}
 
       {/* Question text */}
       <p className="text-white text-lg font-medium leading-relaxed">

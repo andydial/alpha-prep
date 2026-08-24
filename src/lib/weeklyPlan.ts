@@ -1,8 +1,7 @@
 import { supabase } from './supabase'
-import { TOPICS, getWeekNumber } from './curriculum'
+import { TOPICS, EXAM_DOMAINS, getWeekNumber } from './curriculum'
+import { parseExamDate } from './examDate'
 import type { Mastery, WeeklyPlan } from '../types'
-
-const EXAM_DATE = new Date('2026-08-14')
 
 interface PlanPayload {
   primaryTopicId: string
@@ -13,7 +12,10 @@ interface PlanPayload {
   domainRotation: [string, string][]
 }
 
-const VALID_TOPIC_IDS = new Set(TOPICS.map(t => t.id))
+// Only topics on the EduTest paper may be planned. Retired abstract topics and
+// the writing topics (practised through the timed writing task) are excluded.
+const PLANNABLE_TOPICS = TOPICS.filter(t => t.active && EXAM_DOMAINS.includes(t.domain))
+const VALID_TOPIC_IDS = new Set(PLANNABLE_TOPICS.map(t => t.id))
 
 function pickFallbackTopics(
   masteryScores: { topicId: string; score: number }[]
@@ -39,14 +41,17 @@ async function callAnthropicForPlan(
 Current mastery scores (0-100%):
 ${masteryScores.map(m => `- ${m.topicId} (${m.topicName}): ${Math.round(m.score * 100)}%`).join('\n')}
 
-Choose 2 focus topics for this week AND provide a 5-session domain rotation that guarantees all 4 exam domains (maths, reading, verbal, abstract) are touched across the week.
+The exam is an EduTest paper with four multiple-choice sections: Mathematics, Reading Comprehension, Verbal Reasoning and Numerical Reasoning. There is NO abstract or non-verbal reasoning section — never name one.
+
+Choose 2 focus topics for this week AND provide a 5-session domain rotation that guarantees all 4 exam sections are touched across the week.
 
 Exam domain guidance:
+- Domains must be exactly one of: maths, reading, verbal, numerical
 - Pairs should mix strengths with weaknesses for each session
 - Use this baseline rotation unless mastery data suggests otherwise:
   Session 1: maths + verbal
-  Session 2: reading + abstract
-  Session 3: maths + abstract
+  Session 2: reading + numerical
+  Session 3: maths + numerical
   Session 4: verbal + reading
   Session 5: the two lowest-scoring domains
 
@@ -59,8 +64,8 @@ Respond with JSON only — no markdown, no preamble:
   "rationale": "2-3 sentences explaining why these topics and this rotation this week based on the mastery data",
   "domainRotation": [
     ["maths", "verbal"],
-    ["reading", "abstract"],
-    ["maths", "abstract"],
+    ["reading", "numerical"],
+    ["maths", "numerical"],
     ["verbal", "reading"],
     ["<weakest_domain>", "<second_weakest_domain>"]
   ]
@@ -102,14 +107,31 @@ Respond with JSON only — no markdown, no preamble:
     if (!secondaryValid) parsed.secondaryTopicId = fallback.secondaryTopicId
   }
 
+  // A rotation naming a section that is not on the paper (abstract, writing)
+  // would put an off-syllabus block into a real session. Drop it and let
+  // getSessionDomainPair fall back to the weakest exam domains.
+  const rotationValid = Array.isArray(parsed.domainRotation) &&
+    parsed.domainRotation.every(pair =>
+      Array.isArray(pair) && pair.length === 2 &&
+      pair.every(d => (EXAM_DOMAINS as string[]).includes(d)))
+  if (!rotationValid) {
+    console.error('[weeklyPlan] AI returned an off-syllabus domain rotation:', parsed.domainRotation)
+    parsed.domainRotation = [
+      ['maths', 'verbal'], ['reading', 'numerical'], ['maths', 'numerical'],
+      ['verbal', 'reading'], ['maths', 'reading'],
+    ]
+  }
+
   return parsed
 }
 
 export async function generateWeeklyPlan(
   studentId: string,
-  masteryRows: Mastery[]
+  masteryRows: Mastery[],
+  /** From settings.exam_date — never hardcode this. */
+  examDateValue?: string | null,
 ): Promise<WeeklyPlan | null> {
-  const weekNumber = getWeekNumber(EXAM_DATE)
+  const weekNumber = getWeekNumber(parseExamDate(examDateValue))
 
   const today = new Date()
   const monday = new Date(today)
@@ -118,7 +140,7 @@ export async function generateWeeklyPlan(
   monday.setDate(today.getDate() + daysToMonday)
   const weekStart = monday.toISOString().split('T')[0]
 
-  const masteryScores = TOPICS.map(t => {
+  const masteryScores = PLANNABLE_TOPICS.map(t => {
     const m = masteryRows.find(r => r.topic_id === t.id)
     return { topicId: t.id, topicName: t.name, score: m?.score_alltime ?? 0 }
   })

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useSettings } from '../hooks/useSettings'
+import { formatClock, DEFAULT_SECONDS_PER_QUESTION } from '../lib/sessionTimer'
 import { hashPIN, isPinConfigured, saveQuickSignIn } from '../lib/pinLogin'
 
 // TODO: multi-child — replace with dynamic child lookup
@@ -28,6 +29,11 @@ export function Settings() {
   const [writingOn, setWritingOn] = useState(false)
   const [sessionSave, setSessionSave] = useState<SaveState>('idle')
 
+  // Timed tests
+  const [timerOn, setTimerOn] = useState(true)
+  const [secondsPerQ, setSecondsPerQ] = useState(String(DEFAULT_SECONDS_PER_QUESTION))
+  const [timerSave, setTimerSave] = useState<SaveState>('idle')
+
   // Difficulty offset
   const [diffOffset, setDiffOffset] = useState(0)
   const [diffSave, setDiffSave] = useState<SaveState>('idle')
@@ -46,6 +52,8 @@ export function Settings() {
     setExamDate(settings.exam_date ?? '2026-09-05')
     setDefaultQ(settings.default_session_questions ?? '40')
     setWritingOn(settings.writing_enabled === 'true')
+    setTimerOn(settings.timer_enabled !== 'false')
+    setSecondsPerQ(settings.timer_seconds_per_question ?? String(DEFAULT_SECONDS_PER_QUESTION))
     setDiffOffset(parseInt(settings.difficulty_offset ?? '0', 10) || 0)
   }, [loading, settings])
 
@@ -74,6 +82,16 @@ export function Settings() {
     ])
     setSessionSave(a && b ? 'saved' : 'idle')
     if (a && b) setTimeout(() => setSessionSave('idle'), 2000)
+  }
+
+  async function handleSaveTimer() {
+    setTimerSave('saving')
+    const [a, b] = await Promise.all([
+      saveSetting('timer_enabled', String(timerOn)),
+      saveSetting('timer_seconds_per_question', secondsPerQ),
+    ])
+    setTimerSave(a && b ? 'saved' : 'idle')
+    if (a && b) setTimeout(() => setTimerSave('idle'), 2000)
   }
 
   async function handleSaveDifficulty() {
@@ -156,13 +174,15 @@ export function Settings() {
               </button>
             ))}
           </div>
-          <p className="text-gray-500 text-xs">Domain Focus always 20Q · Topic Drill always 15Q</p>
+          <p className="text-gray-500 text-xs">Exam Section Focus always 20Q · Topic Drill always 15Q</p>
         </div>
 
         <div className="flex items-center justify-between py-1">
           <div>
             <p className="text-white text-sm font-medium">Writing domain</p>
-            <p className="text-gray-500 text-xs mt-0.5">Include Written Expression in weekly plans</p>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Written Expression is always available as its own timed task from the session picker
+            </p>
           </div>
           <button
             onClick={() => { setWritingOn(prev => !prev); setSessionSave('idle') }}
@@ -180,23 +200,85 @@ export function Settings() {
         <SaveButton state={sessionSave} onClick={handleSaveSession} />
       </section>
 
+      {/* Timed Tests */}
+      <section className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+        <div>
+          <h2 className="text-white font-semibold">Timed Tests</h2>
+          <p className="text-gray-500 text-xs mt-1">
+            The real EduTest paper runs at about 60 seconds per question, so practising
+            under a clock is part of the preparation.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between py-1">
+          <div>
+            <p className="text-white text-sm font-medium">Timer on</p>
+            <p className="text-gray-500 text-xs mt-0.5">
+              Aarav sees a countdown for the whole test, and it is marked automatically when time runs out.
+            </p>
+          </div>
+          <button
+            onClick={() => { setTimerOn(prev => !prev); setTimerSave('idle') }}
+            className={`relative w-11 h-6 rounded-full flex-shrink-0 ml-4 transition-colors ${timerOn ? 'bg-blue-600' : 'bg-gray-700'}`}
+            aria-label="Toggle timed tests"
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                timerOn ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className={`space-y-1.5 transition-opacity ${timerOn ? '' : 'opacity-40 pointer-events-none'}`}>
+          <label className="text-gray-400 text-sm block">Seconds per question</label>
+          <div className="grid grid-cols-4 gap-2">
+            {(['45', '60', '75', '90'] as const).map(n => (
+              <button
+                key={n}
+                onClick={() => { setSecondsPerQ(n); setTimerSave('idle') }}
+                disabled={!timerOn}
+                className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${
+                  secondsPerQ === n
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500'
+                }`}
+              >
+                {n}s
+              </button>
+            ))}
+          </div>
+          <p className="text-gray-500 text-xs">
+            {(() => {
+              const n = parseInt(defaultQ, 10) || 20
+              const per = parseInt(secondsPerQ, 10) || DEFAULT_SECONDS_PER_QUESTION
+              return `A ${n}-question session gets ${formatClock(n * per)}. 60s matches the real paper.`
+            })()}
+          </p>
+        </div>
+
+        <SaveButton state={timerSave} onClick={handleSaveTimer} />
+      </section>
+
       {/* Difficulty Offset */}
       <section className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
         <div>
           <h2 className="text-white font-semibold">Question Difficulty</h2>
           <p className="text-gray-500 text-xs mt-1">
-            Adjusts how hard questions are for Aarav. Takes effect at the start of the next session.
+            Shifts the whole session relative to the real EduTest paper. Around 8% of every
+            session is always pitched two levels higher than this setting, so there is a hard
+            tail whatever you choose. Takes effect at the start of the next session.
           </p>
         </div>
         <div className="space-y-3">
           {(() => {
-            const LABELS = ['Much easier', 'Easier', 'Normal', 'Harder', 'Maximum challenge']
+            const LABELS = ['Much easier', 'Easier', 'Exam level', 'Harder', 'Maximum challenge']
             const DESCRIPTIONS = [
-              'Difficulty 4–6 · good for consolidation',
-              'Difficulty 5–7 · slightly below default',
-              'Difficulty 6–8 · default for Aarav',
-              'Difficulty 7–9 · above typical level',
-              'Difficulty 8–10 · elite challenge',
+              'Two levels below the paper · consolidation',
+              'One level below the paper',
+              'Matched to the EduTest paper · recommended',
+              'One level above the paper',
+              'Two levels above the paper · elite challenge',
             ]
             return (
               <div className="flex items-center gap-4">

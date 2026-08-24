@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Star, Zap, RotateCcw, BarChart2, Loader2, Flame, TrendingUp } from 'lucide-react'
+import { Star, Zap, RotateCcw, BarChart2, Loader2, Flame, TrendingUp, Timer } from 'lucide-react'
 import { generateSessionSummary } from '../lib/anthropic'
 
 interface SessionResult {
@@ -15,6 +15,10 @@ interface SessionResult {
   leveledUp: boolean
   newStreak: number
   badgesEarned: string[]
+  /** True when the countdown expired and the test was marked where it stood. */
+  timedOut?: boolean
+  /** Questions actually answered — below totalQuestions when time ran out. */
+  answeredCount?: number
 }
 
 const LEVEL_TITLES: Record<number, string> = {
@@ -63,10 +67,31 @@ export function Results() {
   const pct = Math.round((result.correctCount / result.totalQuestions) * 100)
   const isStrong = pct >= 80
   const levelTitle = LEVEL_TITLES[result.newLevel] ?? 'Alpha'
+  const answered = result.answeredCount ?? result.totalQuestions
+  const notReached = Math.max(0, result.totalQuestions - answered)
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-lg space-y-5">
+
+        {/* Timed out — the test was marked where it stood, which is what the
+            real paper does. Say so plainly rather than letting the score look
+            like a normal finish. */}
+        {result.timedOut && (
+          <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl px-6 py-4 flex items-start gap-3">
+            <Timer size={18} className="text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="text-amber-300 font-semibold text-sm">
+                Time's up — marked at {result.correctCount}/{result.totalQuestions}
+              </p>
+              <p className="text-amber-200/70 text-xs leading-relaxed">
+                {notReached > 0
+                  ? `${notReached} question${notReached === 1 ? '' : 's'} not reached. On the real paper, pace is worth as much as accuracy — a question left blank scores the same as one answered incorrectly.`
+                  : 'You answered every question before the clock ran out — that is exam pace.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Level-up celebration */}
         {result.leveledUp && (
@@ -97,7 +122,9 @@ export function Results() {
             {result.correctCount}
             <span className="text-gray-500 text-4xl"> / {result.totalQuestions}</span>
           </div>
-          <div className="text-gray-400 text-sm">{pct}% correct</div>
+          <div className="text-gray-400 text-sm">
+            {pct}% correct{notReached > 0 && ` · ${answered} attempted`}
+          </div>
           <div className={`text-lg font-semibold ${isStrong ? 'text-green-400' : 'text-amber-400'}`}>
             {isStrong ? 'Well done!' : "Keep pushing — you're getting there!"}
           </div>

@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/useUser'
 import { useProgress } from '../hooks/useProgress'
 import { useWeeklyPlan } from '../hooks/useWeeklyPlan'
+import { useSettings } from '../hooks/useSettings'
 import { supabase } from '../lib/supabase'
 import { getWeekNumber } from '../lib/curriculum'
+import { parseExamDate } from '../lib/examDate'
 import { generateWeeklyPlan } from '../lib/weeklyPlan'
 import { CountdownBanner } from '../components/CountdownBanner'
 import { ParentDashboard } from '../components/parent/ParentDashboard'
@@ -12,8 +14,6 @@ import { LevelBadge } from '../components/LevelBadge'
 import { StreakCounter } from '../components/StreakCounter'
 import { FocusTodayCard } from '../components/FocusTodayCard'
 import { WeeklyThemeCard } from '../components/WeeklyThemeCard'
-
-const EXAM_DATE = new Date('2026-08-14')
 
 interface WeekStats {
   questionsThisWeek: number
@@ -30,26 +30,27 @@ export function Dashboard() {
   const { user, profile, loading: userLoading } = useUser()
   const { mastery, loading: masteryLoading } = useProgress(user?.id)
   const { plan, loading: planLoading, refetch: refetchPlan } = useWeeklyPlan(user?.id)
+  const { settings, loading: settingsLoading } = useSettings()
   const [weekStats, setWeekStats] = useState<WeekStats>({ questionsThisWeek: 0, accuracyThisWeek: null })
   const [generatingPlan, setGeneratingPlan] = useState(false)
   const generationAttempted = useRef(false)
 
-  const loading = userLoading || masteryLoading || planLoading
+  const loading = userLoading || masteryLoading || planLoading || settingsLoading
 
   // Auto-generate this week's plan on first login of the week when none exists
   useEffect(() => {
-    if (planLoading || masteryLoading || plan || !user?.id || profile?.role !== 'student' || generationAttempted.current) return
+    if (planLoading || masteryLoading || settingsLoading || plan || !user?.id || profile?.role !== 'student' || generationAttempted.current) return
     generationAttempted.current = true
     setGeneratingPlan(true)
-    generateWeeklyPlan(user.id, mastery)
+    generateWeeklyPlan(user.id, mastery, settings.exam_date)
       .then(() => { void refetchPlan() })
       .catch((err: unknown) => { console.error('[Dashboard] plan generation failed:', err) })
       .finally(() => setGeneratingPlan(false))
   // mastery and refetchPlan are stable between renders; ref guard prevents re-runs
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planLoading, masteryLoading, plan, user?.id, profile?.role])
+  }, [planLoading, masteryLoading, settingsLoading, plan, user?.id, profile?.role])
 
-  const weekNumber = getWeekNumber(EXAM_DATE)
+  const weekNumber = getWeekNumber(parseExamDate(settings.exam_date))
 
   // Fetch week stats from sessions table
   useEffect(() => {
