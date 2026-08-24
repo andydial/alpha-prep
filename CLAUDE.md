@@ -4,7 +4,7 @@
 Build a personalised AI study platform to prepare a Year 6 student for the EDSC Alpha (accelerated learning) entrance exam in approximately 8 weeks. The app must generate unlimited Victorian curriculum questions, adapt to the student's weaknesses, track progress with full persistence, and make the entrance exam feel easy through deliberate over-preparation.
 
 **Primary user:** Aarav, Year 6, high achiever — near top of his class. Dad (Andy) is the admin/supervisor.
-**Exam:** EDSC Alpha entrance test, Victoria, Australia. ~8 weeks away.
+**Exam:** EDSC Alpha entrance test, Victoria, Australia — an **EduTest** paper. See "Exam Context" below; it is not an ACER paper.
 **Stack:** React + Vite → Netlify (free), Supabase (free tier Postgres + Auth), Anthropic API (Claude Sonnet).
 
 ### Student Profile: Aarav
@@ -104,8 +104,13 @@ VITE_ANTHROPIC_API_KEY=
 Key-value store in `public.settings`. Parent role can write, student role can read.
 
 Current keys:
-- `exam_date`: ISO date string (e.g. `'2026-09-05'`) — drives all countdowns and weekly plan pacing
-- `default_session_questions`: integer as string (e.g. `'40'`) — default questions per session
+- `exam_date`: ISO date string (e.g. `'2026-09-05'`) — drives all countdowns, the prep week and the difficulty band. **Never hardcode the exam date**; read it through `parseExamDate(settings.exam_date)` in `src/lib/examDate.ts`.
+- `default_session_questions`: integer as string (e.g. `'20'`) — default questions per Planned Session
+- `difficulty_offset`: `-2`..`2` — shifts the core difficulty band relative to the paper
+- `writing_enabled`: `'true'` / `'false'` — include the writing domain in weekly plans
+- `timer_enabled`: `'true'` / `'false'` — whole-test countdown. **This is the parent's off switch.**
+- `timer_seconds_per_question`: integer as string, default `'60'` — the real EduTest pace
+- `writing_time_seconds`: integer as string, default `'900'` — Written Expression time limit
 
 Hook: `src/hooks/useSettings.ts` — returns `{ settings: Record<string, string>, loading: boolean }`
 
@@ -130,7 +135,7 @@ create table public.profiles (
 -- Curriculum topics master list
 create table public.topics (
   id text primary key,            -- e.g. 'maths_fractions'
-  domain text not null,           -- 'maths' | 'reading' | 'verbal' | 'abstract' | 'writing'
+  domain text not null,           -- 'maths' | 'reading' | 'verbal' | 'numerical' | 'writing' ('abstract' = legacy, inactive)
   name text not null,             -- 'Fractions & Decimals'
   year_level int default 6,
   difficulty_base int default 5,  -- 1-10 base difficulty
@@ -215,6 +220,11 @@ create policy "own profile" on public.profiles for all using (auth.uid() = id);
 
 ### Seed Topics Data
 
+> **Historical.** This is the original ACER-shaped seed. Run it only on a fresh
+> database, and always follow it with `db/migrate_edutest_alignment.sql`, which
+> re-homes the two numerical topics, retires the off-syllabus abstract ones and
+> adds the five new EduTest topics. `src/lib/curriculum.ts` holds the current list.
+
 ```sql
 insert into public.topics (id, domain, name, difficulty_base) values
 -- Mathematics
@@ -255,32 +265,66 @@ insert into public.topics (id, domain, name, difficulty_base) values
 
 ---
 
-## Victorian Curriculum Alignment
+## Exam Alignment — EduTest
 
-The AI must generate questions that:
-- Align with **Victorian Curriculum F-10 Version 2.0**
-- Target **Year 5–7 range** (above grade level = competitive advantage)
-- Match **ACER-style selective entry** question formats (used by EDSC Alpha and similar programs)
-- Cover the 4 main domains tested: Maths Reasoning, Reading Comprehension, Verbal Reasoning, Abstract Reasoning
+`src/lib/examSpec.ts` is the single source of truth for what the exam is. Everything the AI is told about the paper flows from it.
 
-### 8-Week Difficulty Ramp
+### The paper
 
-| Week | Difficulty | Focus |
-|---|---|---|
-| 1 | 4-5/10 | Baseline assessment across all domains |
-| 2 | 5/10 | Identify and begin drilling weak areas |
-| 3 | 5-6/10 | Consolidate weak areas, maintain strengths |
-| 4 | 6/10 | Cross-domain mixed sessions |
-| 5 | 6-7/10 | Exam-format timed practice begins |
-| 6 | 7/10 | High-difficulty targeted drilling |
-| 7 | 7-8/10 | Full mock tests, pressure simulation |
-| 8 | 8/10 | Final review, confidence consolidation |
+| # | Section | Time | Category | App domain |
+|---|---|---|---|---|
+| 1 | Verbal Reasoning | 30 min | Ability | `verbal` |
+| 2 | Numerical Reasoning | 30 min | Ability | `numerical` |
+| 3 | Reading Comprehension | 30 min | Achievement | `reading` |
+| 4 | Mathematics | 30 min | Achievement | `maths` |
+| 5 | Written Expression | 15 min | Achievement | `writing` |
+
+- Sections 1–4 are **entirely multiple choice, four options**. `generateQuestion` throws `NOT_MULTIPLE_CHOICE` / `WRONG_OPTION_COUNT` and regenerates otherwise.
+- Pace is roughly **60 seconds per question**, no calculator.
+- **There is no abstract / spatial / non-verbal reasoning section.** `abstract_spatial` and `abstract_odd_shape` are `active: false` and `abstract` is excluded from `EXAM_DOMAINS`; they exist only so historical rows resolve to a name.
+- `abstract_sequences` and `abstract_pattern_matrix` were re-homed into `numerical` rather than replaced, so Aarav's mastery history on them carries across.
+
+Sources: [EDSC ALPHA](https://www.eastdonsc.vic.edu.au/learning/alpha-program/) · [EduTest format](https://braintreecoaching.com.au/edutest-exam-format) · [EduTest guide](https://aceachievers.com.au/scholarship-exams/guides/edutest-scholarship-exam-guide.html)
+
+Content still aligns with **Victorian Curriculum F-10 v2.0**, Year 6–7, for the two achievement sections.
+
+### Difficulty band per prep week
+
+Difficulty is re-anchored to this exam: **5 = a routine EduTest item at this year level, 7 = a hard item, 9–10 = top-percentile**. `getDifficultyBand(weekNumber, offset)` returns the core level; `stretch` is always `core + 2` capped at 10.
+
+| Week | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| core | 5 | 5 | 6 | 6 | 6 | 7 | 7 | 7 |
+
+`buildDifficultyPlan` then puts **~8% of every session (never below 5%, never above 10%)** at the stretch level, never on question 1 and never two in a row. The parent's `difficulty_offset` shifts `core`; the stretch tail is always present regardless.
+
+### Session blueprint — coverage and weakness drilling
+
+`src/lib/weakness.ts` plans the whole session before the first question is asked, one block per domain. Topics used to be drawn per question by a probabilistic selector, so coverage was luck. The blueprint makes three things guarantees:
+
+- an even spread across the block's topics as the base
+- **1–3 extra questions on the weakest topic** (and 0–2 on the runner-up), taken off the strongest topics so the block stays the same length
+- no topic above **40%** of the block, and at least **3 distinct topics** per block
+
+Weakness ranking weights recent form (last 21 days of attempts) 0.6 against the all-time mastery score 0.4, and pulls low-evidence topics toward neutral — an unattempted topic is unknown, not weak.
+
+### Reading comprehension
+
+`generateReadingSet` returns **one passage (130–220 words) plus up to 4 questions on it**, each testing a different reading skill, matching how the section actually works. `useStudySession` queues the extras so a passage is generated once. Falls back to single-question generation if the set fails validation.
+
+### Written Expression
+
+`/study/writing` — one prompt, 15 minutes, no planning time, marked by `markWritingResponse` against the four published criteria (ideas, structure, language, conventions) at 0–4 each. Recorded as a one-question session so it flows into XP, streak, mastery and the parent report. Narrative and persuasive alternate by prep week.
 
 ---
 
 ## AI Question Generation
 
 ### System Prompt Template (`src/lib/anthropic.ts`)
+
+> **Abridged.** The live prompt prepends `EXAM_CONTEXT` from `src/lib/examSpec.ts`
+> and appends the per-section `DOMAIN_GUIDANCE` and per-topic `TOPIC_GUIDANCE`.
+> Read the source, not this excerpt, before changing generation behaviour.
 
 ```typescript
 const SYSTEM_PROMPT = `You are an expert Australian tutor preparing Aarav, a high-achieving Year 6 student, for the EDSC Alpha (accelerated learning) entrance exam in Victoria. Aarav is near the top of his class and thrives on challenge — he should always feel stretched, never bored.
@@ -298,8 +342,8 @@ QUESTION RULES:
 - Questions must require genuine reasoning, not just recall
 - Multi-step problems preferred for maths
 - For maths: show clear working steps in explanations
-- For reading: reference the key part of the text in explanations
-- For verbal/abstract: explain the rule or pattern that makes the answer correct
+- For reading: reference the key part of the passage in explanations
+- For verbal/numerical reasoning: explain the rule or relationship that makes the answer correct
 - Never repeat a question from the same session
 - Australian English spelling throughout (colour, maths, programme, fulfil, etc.)
 
@@ -512,7 +556,7 @@ After every session, show a results screen with:
 
 ### What NOT to gamify
 
-- Do NOT add timers that rush him on individual questions (time pressure in timed test mode only)
+- Do NOT add timers on individual questions. The clock is on the **whole test** (`useCountdown` + `SessionTimer`), which is how the real paper works — a per-question timer punishes thinking rather than rewarding pace.
 - Do NOT show a leaderboard vs other students (this is solo prep)
 - Do NOT make incorrect answers feel punishing — small XP for attempts always
 - Do NOT let XP farming replace quality — badge conditions require minimum question counts
@@ -710,16 +754,15 @@ npx tailwindcss init -p
 
 ## Exam Context (Brief the AI on This)
 
-The EDSC Alpha program at East Doncaster Secondary College is a selective accelerated learning program. Entry is competitive. The entrance test follows ACER-style formats similar to:
-- ACER Scholarship Tests
-- Selective Entry High School tests (Vic)
-- EduTest assessments
+The EDSC Alpha program at East Doncaster Secondary College is a selective accelerated learning program. Entry is competitive. **The entrance test is written and administered by EduTest** — the school describes it as "testing in numeracy, literacy, writing, logic and reasoning", which maps onto EduTest's five sections. Testing runs 9am–12pm.
 
 Questions tend to be:
-- Multi-step reasoning (not just recall)
-- Time-pressured (speed + accuracy matter)
-- Abstract and lateral thinking rewarded
-- Reading passages with 4-6 inference questions
+- Multiple choice, four options, across all four non-writing sections
+- Multi-step reasoning (not just recall), answerable in about 60 seconds
+- Time-pressured — speed and accuracy carry equal weight
+- Reading passages with several questions each
+
+**Do not generate abstract / non-verbal / spatial pattern questions.** They are not on this paper. Earlier versions of this app treated the test as ACER-style and drilled a whole Abstract Reasoning domain that Aarav will never sit, while omitting Numerical Reasoning entirely.
 
 The goal is not just to pass — it is to be so well-prepared that the exam feels routine.
 
@@ -777,11 +820,27 @@ The goal is not just to pass — it is to be so well-prepared that the exam feel
 
 ✅ **Right answer marked wrong — FIXED (August 2026).** The model asserted `correct_answer` before reasoning, and the marker was handed that key up front, so a bad key beat the student even when the working shown underneath reached the student's number. Three changes: `working` now precedes `correct_answer` in the generation schema (answer follows the reasoning); `answerConsistentWithWorking` rejects a numeric key that appears nowhere in its own working, before the question is served; `evaluateAnswer` re-solves the question independently before it may look at the key, marks correct against either result, runs on Sonnet, and now also acts as a second opinion on any MC answer marked wrong locally. The verified answer is what gets displayed and stored. Live regression tests: `src/lib/anthropic.live.test.ts` (`RUN_LIVE_TESTS=1`).
 
+✅ **EduTest realignment — DONE (August 2026).** The exam is an EduTest paper, not ACER. Abstract Reasoning removed from every rotation and picker; Numerical Reasoning added as a full section; all exam questions forced to four-option multiple choice; reading delivered as passage sets; Written Expression built at `/study/writing`. Migration: `db/migrate_edutest_alignment.sql`. Plan: `docs/superpowers/plans/2026-08-24-edutest-alignment-weakness-drilling-timer.md`.
+
+✅ **Whole-test timer — DONE (August 2026).** Countdown across the whole session at `timer_seconds_per_question` (default 60s, the real pace). On expiry the test is marked where it stood and scored against the planned total. Parent switches it off with `timer_enabled` in Settings.
+
+✅ **Weakness drilling — DONE (August 2026).** `buildBlueprint` gives the weakest topic 1–3 extra questions, capped at 40% of a block with at least 3 topics in play.
+
+✅ **Hardcoded exam date — FIXED (August 2026).** `useStudySession`, `weeklyPlan`, `Dashboard` and `ParentReport` all held `new Date('2026-08-14')` — a date that had passed, pinning `getWeekNumber` at its week-8 clamp and forcing every question to difficulty 8–10. All four now read `settings.exam_date`.
+
+✅ **`session_type` mislabel — FIXED (August 2026).** Now `'drill'` for a forced-topic session, `'timed_test'` when a limit is set, `'practice'` otherwise. Still not used as a filter anywhere.
+
+✅ **Domain blocks now strict.** The blueprint assigns every slot a topic from its own block's domain, and `streamBoundary` is `ceil(totalQuestions / 2)` — previously hardcoded to 20, so any session under 40 questions never reached its second domain.
+
 ❌ **Weekly plan not displaying** — Dashboard Week Focus card not reading generated plan correctly.
 
-❌ **Session mode selection** — not built yet. Aarav/parent should choose before starting: full planned (40Q), single domain (20Q), single topic drill (15Q).
+### Migrations to Run
 
-❌ **Domain blocks not strict** — Q1-20 must be Domain 1 only, Q21-40 Domain 2 only.
+In Supabase → SQL Editor, in order. All are safe to re-run.
+
+1. `db/parent_read_policies.sql` — parent account reads Aarav's data
+2. `db/seed_player_cards.sql`, `db/migrate_squad.sql` — gamification
+3. `db/migrate_edutest_alignment.sql` — **EduTest topic taxonomy, session timer columns, timer settings.** The app runs correctly without it (`examTopicsForDomain` filters unknown topic IDs against the live `topics` table so `attempts.topic_id`'s foreign key never fails), but the five new topics stay unused until it is run.
 
 ### RLS Policy Needed for Parent Report
 Run this in Supabase SQL editor to allow parent account to read Aarav's data:
@@ -818,4 +877,4 @@ create policy "parent can read all mastery"
   );
 ```
 
-*Last updated: June 2026 | Stack: React 18 + Vite + Supabase + Anthropic API | Target: EDSC Alpha entrance exam*
+*Last updated: August 2026 | Stack: React 19 + Vite + Supabase + Anthropic API | Target: EDSC Alpha entrance exam (EduTest)*
