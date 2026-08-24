@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
-import { getLevelForXP } from './curriculum'
+import { getLevelForXP, TOPICS } from './curriculum'
+import type { Domain } from '../types'
 
 interface SessionEndParams {
   studentId: string
@@ -77,7 +78,15 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
       score_7day: score7day,
       last_updated: new Date().toISOString(),
     }, { onConflict: 'student_id,topic_id' })
-    if (upsertError) console.error('[runSessionEnd] mastery upsert failed:', topicId, upsertError)
+    if (upsertError?.code === '23503') {
+      console.error(
+        `[runSessionEnd] topic "${topicId}" is missing from public.topics — ` +
+        'run db/migrate_edutest_alignment.sql in the Supabase SQL Editor. Mastery was not updated.',
+        upsertError,
+      )
+    } else if (upsertError) {
+      console.error('[runSessionEnd] mastery upsert failed:', topicId, upsertError)
+    }
   }
 
   // ── 2. Update XP + Level ─────────────────────────────────────────────────
@@ -165,16 +174,18 @@ export async function runSessionEnd(params: SessionEndParams): Promise<{
     .select('topic_id, score_alltime')
     .eq('student_id', studentId)
 
-  const topics85 = (masteryRows ?? []).filter(m => m.score_alltime >= 0.85).map(m => m.topic_id)
-  const mathsTopics    = ['maths_fractions','maths_percentages','maths_algebra','maths_geometry','maths_data','maths_word_problems','maths_number_sense','maths_time_money']
-  const readingTopics  = ['reading_inference','reading_main_idea','reading_vocabulary','reading_author_intent','reading_text_structure']
-  const verbalTopics   = ['verbal_analogies','verbal_antonyms','verbal_odd_one_out','verbal_word_relationships','verbal_sentence_completion']
-  const abstractTopics = ['abstract_sequences','abstract_pattern_matrix','abstract_spatial','abstract_odd_shape']
+  const topics85 = new Set((masteryRows ?? []).filter(m => m.score_alltime >= 0.85).map(m => m.topic_id))
+  // Derived from TOPICS rather than hardcoded — these lists silently went stale
+  // when the curriculum was retargeted at the EduTest paper.
+  const masteredIn = (domain: Domain) =>
+    TOPICS.some(t => t.domain === domain && topics85.has(t.id))
 
-  if (topics85.some(t => mathsTopics.includes(t)))    await maybeAward('maths_master')
-  if (topics85.some(t => readingTopics.includes(t)))  await maybeAward('reading_ace')
-  if (topics85.some(t => verbalTopics.includes(t)))   await maybeAward('verbal_pro')
-  if (topics85.some(t => abstractTopics.includes(t))) await maybeAward('abstract_genius')
+  if (masteredIn('maths'))   await maybeAward('maths_master')
+  if (masteredIn('reading')) await maybeAward('reading_ace')
+  if (masteredIn('verbal'))  await maybeAward('verbal_pro')
+  // 'abstract_genius' now covers Numerical Reasoning. The id is kept so badges
+  // already earned survive; db/migrate_edutest_alignment.sql relabels it.
+  if (masteredIn('numerical')) await maybeAward('abstract_genius')
 
   const { error: notesError } = await supabase
     .from('sessions')

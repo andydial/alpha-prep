@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildBlueprint } from './weakness'
 import { getDifficultyBand } from './examSpec'
-import { EXAM_DOMAINS, TOPICS, DOMAIN_NAMES, examTopicsForDomain, getTopicById } from './curriculum'
+import {
+  EXAM_DOMAINS, TOPICS, DOMAIN_NAMES, examTopicsForDomain, getTopicById,
+  POST_MIGRATION_TOPIC_IDS,
+} from './curriculum'
 import type { Domain, Mastery } from '../types'
 
 /**
@@ -34,10 +37,13 @@ const MASTERY: Mastery[] = TOPICS
 
 const band = getDifficultyBand(6, 0)
 
+/** Post-migration Supabase: every topic in src/lib/curriculum.ts exists. */
+const ALL_TOPIC_IDS = new Set(TOPICS.map(t => t.id))
+
 describe('a planned session against the real curriculum', () => {
   for (const domain of EXAM_DOMAINS) {
     describe(DOMAIN_NAMES[domain], () => {
-      const topicIds = examTopicsForDomain(domain, null)
+      const topicIds = examTopicsForDomain(domain, ALL_TOPIC_IDS)
 
       it('draws every question from its own exam section', () => {
         const slots = buildBlueprint({ topicIds, count: 20, band, mastery: MASTERY, recent: [] })
@@ -50,7 +56,7 @@ describe('a planned session against the real curriculum', () => {
         const slots = buildBlueprint({ topicIds, count: 20, band, mastery: MASTERY, recent: [] })
         const counts = new Map<string, number>()
         for (const s of slots) counts.set(s.topicId, (counts.get(s.topicId) ?? 0) + 1)
-        expect(counts.size).toBeGreaterThanOrEqual(3)
+        expect(counts.size).toBeGreaterThanOrEqual(Math.min(3, topicIds.length))
         expect(Math.max(...counts.values())).toBeLessThanOrEqual(8) // 40% of 20
       })
 
@@ -83,7 +89,7 @@ describe('a planned session against the real curriculum', () => {
   it('never plans an abstract-reasoning question — that section is not on the paper', () => {
     for (const domain of EXAM_DOMAINS) {
       const slots = buildBlueprint({
-        topicIds: examTopicsForDomain(domain, null),
+        topicIds: examTopicsForDomain(domain, ALL_TOPIC_IDS),
         count: 40, band, mastery: MASTERY, recent: [],
       })
       for (const s of slots) {
@@ -114,12 +120,49 @@ describe('a planned session against the real curriculum', () => {
     const pair: [Domain, Domain] = ['reading', 'numerical']
     const half = 20
     const slots = [
-      ...buildBlueprint({ topicIds: examTopicsForDomain(pair[0], null), count: half, band, mastery: MASTERY, recent: [] }),
-      ...buildBlueprint({ topicIds: examTopicsForDomain(pair[1], null), count: half, band, mastery: MASTERY, recent: [] }),
+      ...buildBlueprint({ topicIds: examTopicsForDomain(pair[0], ALL_TOPIC_IDS), count: half, band, mastery: MASTERY, recent: [] }),
+      ...buildBlueprint({ topicIds: examTopicsForDomain(pair[1], ALL_TOPIC_IDS), count: half, band, mastery: MASTERY, recent: [] }),
     ]
     expect(slots).toHaveLength(40)
     for (let i = 0; i < 40; i++) {
       expect(getTopicById(slots[i].topicId)?.domain).toBe(i < half ? pair[0] : pair[1])
+    }
+  })
+})
+
+describe('foreign-key safety before the migration has run', () => {
+  it('excludes the new topic ids when the topics table cannot be read', () => {
+    // null means "unknown", which is also the pre-migration state — the
+    // migration is what grants the read policy. Guessing optimistically would
+    // send an unknown topic_id into attempts.topic_id and lose the row.
+    for (const domain of EXAM_DOMAINS) {
+      const topicIds = examTopicsForDomain(domain, null)
+      expect(topicIds.length).toBeGreaterThanOrEqual(2)
+      for (const id of topicIds) {
+        expect(POST_MIGRATION_TOPIC_IDS.has(id)).toBe(false)
+      }
+    }
+  })
+
+  it('uses the new topics once the table confirms they exist', () => {
+    const verbal = examTopicsForDomain('verbal', ALL_TOPIC_IDS)
+    expect(verbal).toContain('verbal_logical_deduction')
+    expect(verbal).toContain('verbal_codes')
+    const numerical = examTopicsForDomain('numerical', ALL_TOPIC_IDS)
+    expect(numerical).toContain('numerical_arithmetic')
+  })
+
+  it('still builds a full, on-domain session with the pre-migration topic list', () => {
+    // Numerical Reasoning is the thinnest case: only two seeded topics until
+    // the migration runs. It must still produce 20 usable slots.
+    for (const domain of EXAM_DOMAINS) {
+      const topicIds = examTopicsForDomain(domain, null)
+      const slots = buildBlueprint({ topicIds, count: 20, band, mastery: MASTERY, recent: [] })
+      expect(slots).toHaveLength(20)
+      for (const s of slots) {
+        expect(getTopicById(s.topicId)?.domain).toBe(domain)
+        expect(POST_MIGRATION_TOPIC_IDS.has(s.topicId)).toBe(false)
+      }
     }
   })
 })

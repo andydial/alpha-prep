@@ -442,6 +442,15 @@ export function useStudySession(
           if (e2) { console.error('[handleAnswer] attempt insert failed:', e2); return }
           setState(prev => ({ ...prev, currentAttemptId: d2?.id ?? null }))
         })
+      } else if (error.code === '23503') {
+        // Foreign key on attempts.topic_id. examTopicsForDomain is supposed to
+        // make this unreachable; if it fires, the topics table is out of step
+        // with src/lib/curriculum.ts.
+        console.error(
+          `[handleAnswer] topic "${currentQuestion.topic_id}" is missing from public.topics — ` +
+          'run db/migrate_edutest_alignment.sql in the Supabase SQL Editor. This attempt was not saved.',
+          error,
+        )
       } else {
         console.error('[handleAnswer] attempt insert failed:', error)
       }

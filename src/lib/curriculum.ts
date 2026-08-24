@@ -239,24 +239,47 @@ export function getTopicsByDomain(domain: Topic['domain']): Topic[] {
 }
 
 /**
+ * Topic IDs added by db/migrate_edutest_alignment.sql.
+ *
+ * `attempts.topic_id` and `mastery.topic_id` are foreign keys into
+ * public.topics, so using one of these before the migration has run makes the
+ * insert fail and silently loses the attempt. Everything not listed here was in
+ * the original seed and is always safe.
+ */
+export const POST_MIGRATION_TOPIC_IDS = new Set([
+  'numerical_arithmetic',
+  'numerical_properties',
+  'numerical_proportion',
+  'verbal_logical_deduction',
+  'verbal_codes',
+])
+
+/**
  * Topic IDs usable for a domain right now.
  *
- * `validIds` is the set of topic IDs actually present in Supabase (null when the
- * table could not be read). The new EduTest topics are additive, so before
- * db/migrate_edutest_alignment.sql has been run they are filtered out here
- * rather than blowing up the foreign key on attempts.topic_id. Every exam
- * domain still resolves to at least two already-seeded IDs, so a session always
- * builds — before and after the migration.
+ * `validIds` is the set of topic IDs actually present in Supabase. When it is
+ * null the table could not be read — which is also the state the app is in
+ * before db/migrate_edutest_alignment.sql runs, since that migration is what
+ * adds the read policy. So null is treated as "assume the migration has not
+ * happened" and the new topics are excluded. Guessing the other way would send
+ * an unknown topic_id into a foreign key and lose the attempt row without
+ * anything visible going wrong.
+ *
+ * Every exam domain still resolves to at least two already-seeded IDs, so a
+ * session always builds — before and after the migration.
  */
 export function examTopicsForDomain(domain: Domain, validIds: Set<string> | null): string[] {
-  const inDomain = TOPICS.filter(t => t.domain === domain && t.active).map(t => t.id)
-  const usable = validIds ? inDomain.filter(id => validIds.has(id)) : inDomain
+  const safe = (ids: string[]) => validIds
+    ? ids.filter(id => validIds.has(id))
+    : ids.filter(id => !POST_MIGRATION_TOPIC_IDS.has(id))
+
+  const usable = safe(TOPICS.filter(t => t.domain === domain && t.active).map(t => t.id))
   if (usable.length > 0) return usable
 
   // Domain wiped out by an unexpected topics table — fall back to maths so the
   // session still runs rather than dying on an empty candidate list.
   const mathsIds = TOPICS.filter(t => t.domain === 'maths' && t.active).map(t => t.id)
-  const mathsUsable = validIds ? mathsIds.filter(id => validIds.has(id)) : mathsIds
+  const mathsUsable = safe(mathsIds)
   return mathsUsable.length > 0 ? mathsUsable : mathsIds
 }
 

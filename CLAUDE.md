@@ -526,7 +526,7 @@ insert into public.badges (id, name, description, icon) values
 ('maths_master',      'Maths Master',      'Reach 85%+ mastery in any Maths topic',         '🔢'),
 ('reading_ace',       'Reading Ace',       'Reach 85%+ mastery in any Reading topic',       '📖'),
 ('verbal_pro',        'Verbal Pro',        'Reach 85%+ mastery in any Verbal topic',        '💬'),
-('abstract_genius',   'Abstract Genius',   'Reach 85%+ mastery in any Abstract topic',      '🧩'),
+('abstract_genius',   'Abstract Genius',   'Reach 85%+ mastery in any Abstract topic',      '🧩'), -- relabelled to 'Numbers Genius' (Numerical Reasoning) by db/migrate_edutest_alignment.sql
 ('level_alpha',       'Alpha Ready',       'Reach Level 8: Alpha',                          '🎯'),
 ('century',           'Century',           'Answer 100 questions total',                    '💯'),
 ('five_hundred',      '500 Club',          'Answer 500 questions total',                    '🌟'),
@@ -840,7 +840,7 @@ In Supabase → SQL Editor, in order. All are safe to re-run.
 
 1. `db/parent_read_policies.sql` — parent account reads Aarav's data
 2. `db/seed_player_cards.sql`, `db/migrate_squad.sql` — gamification
-3. `db/migrate_edutest_alignment.sql` — **EduTest topic taxonomy, session timer columns, timer settings.** The app runs correctly without it (`examTopicsForDomain` filters unknown topic IDs against the live `topics` table so `attempts.topic_id`'s foreign key never fails), but the five new topics stay unused until it is run.
+3. `db/migrate_edutest_alignment.sql` — **EduTest topic taxonomy, session timer columns, timer settings, `topics` read policy.** The app runs correctly without it: `examTopicsForDomain` treats an unreadable `topics` table as "migration not run" and excludes `POST_MIGRATION_TOPIC_IDS`, so `attempts.topic_id`'s foreign key never fails. Until it is run, Numerical Reasoning uses only `abstract_sequences` and `abstract_pattern_matrix`, and the five new topics stay dormant.
 
 ### RLS Policy Needed for Parent Report
 Run this in Supabase SQL editor to allow parent account to read Aarav's data:

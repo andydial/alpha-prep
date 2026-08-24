@@ -52,7 +52,16 @@ insert into public.settings (key, value) values
   ('writing_time_seconds', '900')
 on conflict (key) do nothing;
 
--- ── 7. Let the signed-in app read the topic list ────────────────────────────
+-- ── 7. Relabel the badge that used to mean abstract reasoning ───────────────
+-- The id stays so badges Aarav has already earned are not lost; only what it
+-- stands for changes. runSessionEnd now awards it for Numerical Reasoning.
+update public.badges
+   set name = 'Numbers Genius',
+       description = 'Reach 85%+ mastery in any Numerical Reasoning topic',
+       icon = '🔢'
+ where id = 'abstract_genius';
+
+-- ── 8. Let the signed-in app read the topic list ────────────────────────────
 -- useStudySession reads this to work out which topic IDs actually exist before
 -- it writes an attempt row, so a missing policy here silently disables the new
 -- topics rather than breaking anything.
