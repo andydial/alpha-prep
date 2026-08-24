@@ -41,7 +41,12 @@ describe('answer position across a served session', () => {
       if (q.type !== 'multiple_choice') continue
       raw[(q.options ?? []).findIndex(o => o.trim() === q.correct_answer.trim())] += 1
     }
-    expect(Math.max(...raw)).toBeGreaterThan(raw.reduce((a, b) => a + b, 0) / 2)
+    // Uniform would be 25% in each slot. Whoever writes a question has a strong
+    // positional habit — the original bank sat 24 of 32 answers at A — so the
+    // raw placement is always lopsided and must never be served as written.
+    const total = raw.reduce((a, b) => a + b, 0)
+    expect(Math.max(...raw) / total).toBeGreaterThan(0.35)
+    expect(Math.min(...raw) / total).toBeLessThan(0.15)
   })
 
   it('serves the correct option evenly across A–D once rebalanced', () => {

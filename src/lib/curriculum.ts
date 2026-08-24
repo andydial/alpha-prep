@@ -7,20 +7,29 @@ export const DIFFICULTY_CEILING = 10
 export const DIFFICULTY_DEFAULT = 6
 
 export const DOMAIN_NAMES: Record<Domain, string> = {
-  maths:    'Maths',
-  reading:  'Reading',
-  verbal:   'Verbal Reasoning',
-  abstract: 'Abstract Reasoning',
-  writing:  'Writing',
+  maths:     'Mathematics',
+  reading:   'Reading Comprehension',
+  verbal:    'Verbal Reasoning',
+  numerical: 'Numerical Reasoning',
+  abstract:  'Abstract Reasoning',
+  writing:   'Written Expression',
 }
 
-// 5-session weekly rotation covering all 4 exam domains.
+/**
+ * The four multiple-choice sections of the EduTest paper Aarav will sit.
+ * 'abstract' is deliberately absent — it is not on this exam. 'writing' is a
+ * section but is practised through the dedicated writing task, not in a
+ * question-per-slot session.
+ */
+export const EXAM_DOMAINS: Domain[] = ['maths', 'reading', 'verbal', 'numerical']
+
+// 5-session weekly rotation covering all 4 multiple-choice exam sections.
 // Index 4 is null = pick the two weakest domains at runtime.
 export const WEEKLY_ROTATION: (DomainPair | null)[] = [
-  ['maths',    'verbal'],
-  ['reading',  'abstract'],
-  ['maths',    'abstract'],
-  ['verbal',   'reading'],
+  ['maths',   'verbal'],
+  ['reading', 'numerical'],
+  ['maths',   'numerical'],
+  ['verbal',  'reading'],
   null,
 ]
 
@@ -35,33 +44,56 @@ export const LEVELS: LevelInfo[] = [
   { level: 8, title: 'Alpha',      xpRequired: 20000 },
 ]
 
-// Topic definitions matching the DB seed data
+// Topic definitions matching the DB seed data.
+//
+// Aligned to the EduTest paper (see src/lib/examSpec.ts). Two topics moved
+// domain rather than being replaced: 'abstract_sequences' and
+// 'abstract_pattern_matrix' were always numerical reasoning wearing an
+// "abstract" label, so re-homing them carries Aarav's mastery history across
+// instead of orphaning it. The two genuinely off-syllabus abstract topics are
+// kept but inactive so historical rows still resolve to a name.
 export const TOPICS: Topic[] = [
-  { id: 'maths_fractions',           domain: 'maths',    name: 'Fractions & Decimals',       year_level: 6, difficulty_base: 6, active: true },
-  { id: 'maths_percentages',         domain: 'maths',    name: 'Percentages & Ratios',        year_level: 6, difficulty_base: 6, active: true },
-  { id: 'maths_algebra',             domain: 'maths',    name: 'Algebra & Patterns',          year_level: 6, difficulty_base: 7, active: true },
-  { id: 'maths_geometry',            domain: 'maths',    name: 'Geometry & Measurement',      year_level: 6, difficulty_base: 5, active: true },
-  { id: 'maths_data',                domain: 'maths',    name: 'Data & Probability',          year_level: 6, difficulty_base: 5, active: true },
-  { id: 'maths_word_problems',       domain: 'maths',    name: 'Word Problems & Logic',       year_level: 6, difficulty_base: 7, active: true },
-  { id: 'maths_number_sense',        domain: 'maths',    name: 'Number Sense & Operations',   year_level: 6, difficulty_base: 5, active: true },
-  { id: 'maths_time_money',          domain: 'maths',    name: 'Time, Money & Units',         year_level: 6, difficulty_base: 4, active: true },
-  { id: 'reading_inference',         domain: 'reading',  name: 'Inference & Deduction',       year_level: 6, difficulty_base: 7, active: true },
-  { id: 'reading_main_idea',         domain: 'reading',  name: 'Main Idea & Summary',         year_level: 6, difficulty_base: 5, active: true },
-  { id: 'reading_vocabulary',        domain: 'reading',  name: 'Vocabulary in Context',       year_level: 6, difficulty_base: 6, active: true },
-  { id: 'reading_author_intent',     domain: 'reading',  name: 'Author Purpose & Tone',       year_level: 6, difficulty_base: 7, active: true },
-  { id: 'reading_text_structure',    domain: 'reading',  name: 'Text Structure & Features',   year_level: 6, difficulty_base: 5, active: true },
-  { id: 'verbal_analogies',          domain: 'verbal',   name: 'Word Analogies',              year_level: 6, difficulty_base: 7, active: true },
-  { id: 'verbal_antonyms',           domain: 'verbal',   name: 'Antonyms & Synonyms',         year_level: 6, difficulty_base: 5, active: true },
-  { id: 'verbal_odd_one_out',        domain: 'verbal',   name: 'Odd One Out',                 year_level: 6, difficulty_base: 5, active: true },
-  { id: 'verbal_word_relationships', domain: 'verbal',   name: 'Word Relationships',          year_level: 6, difficulty_base: 6, active: true },
-  { id: 'verbal_sentence_completion',domain: 'verbal',   name: 'Sentence Completion',         year_level: 6, difficulty_base: 6, active: true },
-  { id: 'abstract_sequences',        domain: 'abstract', name: 'Number & Letter Sequences',   year_level: 6, difficulty_base: 7, active: true },
-  { id: 'abstract_pattern_matrix',   domain: 'abstract', name: 'Pattern Matrix',              year_level: 6, difficulty_base: 8, active: true },
-  { id: 'abstract_spatial',          domain: 'abstract', name: 'Spatial Reasoning',           year_level: 6, difficulty_base: 7, active: true },
-  { id: 'abstract_odd_shape',        domain: 'abstract', name: 'Odd Shape Out',               year_level: 6, difficulty_base: 6, active: true },
-  { id: 'writing_planning',          domain: 'writing',  name: 'Planning & Structure',        year_level: 6, difficulty_base: 5, active: true },
-  { id: 'writing_persuasive',        domain: 'writing',  name: 'Persuasive Writing',          year_level: 6, difficulty_base: 6, active: true },
-  { id: 'writing_narrative',         domain: 'writing',  name: 'Narrative Writing',           year_level: 6, difficulty_base: 5, active: true },
+  // ── Mathematics (30 min) ──────────────────────────────────────────────────
+  { id: 'maths_number_sense',        domain: 'maths',     name: 'Number Sense & Operations',        year_level: 6, difficulty_base: 5, active: true },
+  { id: 'maths_fractions',           domain: 'maths',     name: 'Fractions & Decimals',             year_level: 6, difficulty_base: 6, active: true },
+  { id: 'maths_percentages',         domain: 'maths',     name: 'Percentages & Ratios',             year_level: 6, difficulty_base: 6, active: true },
+  { id: 'maths_algebra',             domain: 'maths',     name: 'Patterns & Algebra',               year_level: 6, difficulty_base: 7, active: true },
+  { id: 'maths_geometry',            domain: 'maths',     name: 'Measurement & Geometry',           year_level: 6, difficulty_base: 5, active: true },
+  { id: 'maths_data',                domain: 'maths',     name: 'Statistics & Probability',         year_level: 6, difficulty_base: 5, active: true },
+  { id: 'maths_word_problems',       domain: 'maths',     name: 'Multi-step Word Problems',         year_level: 6, difficulty_base: 7, active: true },
+  { id: 'maths_time_money',          domain: 'maths',     name: 'Time, Money & Units',              year_level: 6, difficulty_base: 5, active: true },
+
+  // ── Reading Comprehension (30 min) ────────────────────────────────────────
+  { id: 'reading_main_idea',         domain: 'reading',   name: 'Main Idea & Summary',              year_level: 6, difficulty_base: 5, active: true },
+  { id: 'reading_inference',         domain: 'reading',   name: 'Inference & Deduction',            year_level: 6, difficulty_base: 7, active: true },
+  { id: 'reading_vocabulary',        domain: 'reading',   name: 'Vocabulary in Context',            year_level: 6, difficulty_base: 6, active: true },
+  { id: 'reading_author_intent',     domain: 'reading',   name: 'Author Purpose & Tone',            year_level: 6, difficulty_base: 7, active: true },
+  { id: 'reading_text_structure',    domain: 'reading',   name: 'Text Structure & Features',        year_level: 6, difficulty_base: 5, active: true },
+
+  // ── Verbal Reasoning (30 min) ─────────────────────────────────────────────
+  { id: 'verbal_analogies',          domain: 'verbal',    name: 'Word Analogies',                   year_level: 6, difficulty_base: 7, active: true },
+  { id: 'verbal_antonyms',           domain: 'verbal',    name: 'Synonyms & Antonyms',              year_level: 6, difficulty_base: 5, active: true },
+  { id: 'verbal_odd_one_out',        domain: 'verbal',    name: 'Odd One Out',                      year_level: 6, difficulty_base: 5, active: true },
+  { id: 'verbal_word_relationships', domain: 'verbal',    name: 'Word Relationships',               year_level: 6, difficulty_base: 6, active: true },
+  { id: 'verbal_sentence_completion',domain: 'verbal',    name: 'Sentence Completion',              year_level: 6, difficulty_base: 6, active: true },
+  { id: 'verbal_logical_deduction',  domain: 'verbal',    name: 'Logical Deduction',                year_level: 6, difficulty_base: 7, active: true },
+  { id: 'verbal_codes',              domain: 'verbal',    name: 'Letter & Word Codes',              year_level: 6, difficulty_base: 6, active: true },
+
+  // ── Numerical Reasoning (30 min) ──────────────────────────────────────────
+  { id: 'abstract_sequences',        domain: 'numerical', name: 'Number & Letter Sequences',        year_level: 6, difficulty_base: 6, active: true },
+  { id: 'abstract_pattern_matrix',   domain: 'numerical', name: 'Number Matrices & Grids',          year_level: 6, difficulty_base: 7, active: true },
+  { id: 'numerical_arithmetic',      domain: 'numerical', name: 'Arithmetic Reasoning & Worded Logic', year_level: 6, difficulty_base: 6, active: true },
+  { id: 'numerical_properties',      domain: 'numerical', name: 'Number Properties & Relationships',year_level: 6, difficulty_base: 6, active: true },
+  { id: 'numerical_proportion',      domain: 'numerical', name: 'Rates, Ratio & Proportion',        year_level: 6, difficulty_base: 7, active: true },
+
+  // ── Written Expression (15 min) ───────────────────────────────────────────
+  { id: 'writing_planning',          domain: 'writing',   name: 'Planning & Structure',             year_level: 6, difficulty_base: 5, active: true },
+  { id: 'writing_persuasive',        domain: 'writing',   name: 'Persuasive Writing',               year_level: 6, difficulty_base: 6, active: true },
+  { id: 'writing_narrative',         domain: 'writing',   name: 'Narrative Writing',                year_level: 6, difficulty_base: 5, active: true },
+
+  // ── Not on the EduTest paper — retained for historical data only ──────────
+  { id: 'abstract_spatial',          domain: 'abstract',  name: 'Spatial Reasoning',                year_level: 6, difficulty_base: 7, active: false },
+  { id: 'abstract_odd_shape',        domain: 'abstract',  name: 'Odd Shape Out',                    year_level: 6, difficulty_base: 6, active: false },
 ]
 
 // ── Difficulty ──────────────────────────────────────────────────────────────
@@ -78,6 +110,23 @@ export function getNextDifficulty(currentDifficulty: number, recentResults: bool
   if (correctRate >= 0.8) return Math.min(DIFFICULTY_CEILING, currentDifficulty + 1)
   if (correctRate <= 0.4) return Math.max(DIFFICULTY_FLOOR, currentDifficulty - 1)
   return currentDifficulty
+}
+
+/**
+ * Live nudge applied on top of the blueprint's planned difficulty.
+ *
+ * The session blueprint owns the exam-level mix (see src/lib/weakness.ts and
+ * buildDifficultyPlan); this only leans one step either way when the last five
+ * answers say Aarav is coasting or struggling. Keeping the nudge to +/-1 stops
+ * a good run from dragging a whole session two levels above the real paper.
+ */
+export function adaptiveDelta(recentResults: boolean[]): -1 | 0 | 1 {
+  const last5 = recentResults.slice(-5)
+  if (last5.length < 3) return 0
+  const rate = last5.filter(Boolean).length / last5.length
+  if (rate >= 0.8) return 1
+  if (rate <= 0.4) return -1
+  return 0
 }
 
 /**
@@ -189,11 +238,33 @@ export function getTopicsByDomain(domain: Topic['domain']): Topic[] {
   return TOPICS.filter(t => t.domain === domain)
 }
 
+/**
+ * Topic IDs usable for a domain right now.
+ *
+ * `validIds` is the set of topic IDs actually present in Supabase (null when the
+ * table could not be read). The new EduTest topics are additive, so before
+ * db/migrate_edutest_alignment.sql has been run they are filtered out here
+ * rather than blowing up the foreign key on attempts.topic_id. Every exam
+ * domain still resolves to at least two already-seeded IDs, so a session always
+ * builds — before and after the migration.
+ */
+export function examTopicsForDomain(domain: Domain, validIds: Set<string> | null): string[] {
+  const inDomain = TOPICS.filter(t => t.domain === domain && t.active).map(t => t.id)
+  const usable = validIds ? inDomain.filter(id => validIds.has(id)) : inDomain
+  if (usable.length > 0) return usable
+
+  // Domain wiped out by an unexpected topics table — fall back to maths so the
+  // session still runs rather than dying on an empty candidate list.
+  const mathsIds = TOPICS.filter(t => t.domain === 'maths' && t.active).map(t => t.id)
+  const mathsUsable = validIds ? mathsIds.filter(id => validIds.has(id)) : mathsIds
+  return mathsUsable.length > 0 ? mathsUsable : mathsIds
+}
+
 // Returns exam domains sorted by average mastery score ascending (weakest first).
-// Ignores 'writing' domain (not in ACER exam).
+// Covers only the four multiple-choice EduTest sections — Written Expression is
+// practised through its own timed task.
 export function getWeakestDomains(mastery: Mastery[]): Domain[] {
-  const examDomains: Domain[] = ['maths', 'reading', 'verbal', 'abstract']
-  const avgByDomain = examDomains.map(domain => {
+  const avgByDomain = EXAM_DOMAINS.map(domain => {
     const topicIds = TOPICS.filter(t => t.domain === domain).map(t => t.id)
     const rows = mastery.filter(m => topicIds.includes(m.topic_id))
     const avg = rows.length > 0
@@ -204,38 +275,44 @@ export function getWeakestDomains(mastery: Mastery[]): Domain[] {
   return avgByDomain.sort((a, b) => a.avg - b.avg).map(d => d.domain)
 }
 
+/** True only for the four multiple-choice sections Aarav will actually sit. */
+function isExamDomain(d: Domain | undefined): d is Domain {
+  return !!d && EXAM_DOMAINS.includes(d)
+}
+
 /**
  * Returns the domain pair for a session.
  * Priority:
  *   1. weekly_plan.domain_rotation[sessionIndex] if set
  *   2. Derive from plan primary/secondary topic domains
  *   3. Two weakest mastery domains
+ *
+ * Every path is filtered through isExamDomain, so a weekly plan generated
+ * before the EduTest realignment (which could name an abstract or writing
+ * topic) can never put an off-syllabus block into a session.
  */
 export function getSessionDomainPair(
   mastery: Mastery[],
   weeklyPlan: WeeklyPlan | null,
   sessionIndexThisWeek: number,
 ): DomainPair {
+  const weakest = getWeakestDomains(mastery)
+  const fallback: DomainPair = [weakest[0] ?? 'maths', weakest[1] ?? 'verbal']
+
   // 1. Explicit rotation from plan
   if (weeklyPlan?.domain_rotation) {
     const slot = weeklyPlan.domain_rotation[sessionIndexThisWeek % weeklyPlan.domain_rotation.length]
-    if (slot) return slot
+    if (slot && isExamDomain(slot[0]) && isExamDomain(slot[1])) return slot
   }
 
   // 2. Derive from plan primary/secondary topics
-  if (weeklyPlan?.primary_topic_id && weeklyPlan?.secondary_topic_id) {
-    const d1 = getTopicById(weeklyPlan.primary_topic_id)?.domain
-    const d2 = getTopicById(weeklyPlan.secondary_topic_id)?.domain
-    if (d1 && d2 && d1 !== d2) return [d1 as Domain, d2 as Domain]
-    if (d1) {
-      const weakest = getWeakestDomains(mastery).find(d => d !== d1) ?? 'verbal'
-      return [d1 as Domain, weakest]
-    }
-  }
+  const d1 = getTopicById(weeklyPlan?.primary_topic_id ?? '')?.domain
+  const d2 = getTopicById(weeklyPlan?.secondary_topic_id ?? '')?.domain
+  if (isExamDomain(d1) && isExamDomain(d2) && d1 !== d2) return [d1, d2]
+  if (isExamDomain(d1)) return [d1, weakest.find(d => d !== d1) ?? 'verbal']
 
   // 3. Two weakest domains
-  const weakest = getWeakestDomains(mastery)
-  return [weakest[0] ?? 'maths', weakest[1] ?? 'verbal']
+  return fallback
 }
 
 /**

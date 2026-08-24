@@ -664,6 +664,608 @@ export const FALLBACK_QUESTIONS: Question[] = [
     explanation: "3, 5 and 7 are all odd numbers, while 8 is even, making the octagon the exception. The grouping rule in abstract questions is often numerical rather than visual."
   },
 
+  // ── Numerical Reasoning: Number & Letter Sequences ────────────────────────
+  {
+    question: "What number comes next in this series: 2, 6, 12, 20, 30, ?",
+    type: 'multiple_choice',
+    options: ["A) 36", "B) 40", "C) 42", "D) 44"],
+    correct_answer: "C) 42",
+    difficulty: 6,
+    topic_id: 'abstract_sequences',
+    hint: "Write the gaps between the terms underneath and look at those.",
+    explanation: "The gaps are 4, 6, 8, 10 — each one two larger than the last — so the next gap is 12 and the next term is 30 + 12 = 42. When a series has no constant difference, the differences themselves are usually the pattern."
+  },
+  {
+    question: "What letter comes next in this series: B, D, G, K, P, ?",
+    type: 'multiple_choice',
+    options: ["A) T", "B) U", "C) V", "D) W"],
+    correct_answer: "C) V",
+    difficulty: 7,
+    topic_id: 'abstract_sequences',
+    hint: "Count how many letters you skip between each pair.",
+    explanation: "The steps are +2, +3, +4, +5, so the next step is +6. P is the 16th letter, and 16 + 6 = 22, which is V. Converting letters to their positions turns a letter series into an ordinary number series."
+  },
+  {
+    question: "Find the missing number: 3, 7, 15, 31, ?, 127",
+    type: 'multiple_choice',
+    options: ["A) 62", "B) 63", "C) 64", "D) 79"],
+    correct_answer: "B) 63",
+    difficulty: 7,
+    topic_id: 'abstract_sequences',
+    hint: "Try doubling each term and doing one more thing to it.",
+    explanation: "Each term is double the previous one plus 1: 3 to 7, 7 to 15, 15 to 31, so 31 x 2 + 1 = 63, and 63 x 2 + 1 = 127 confirms the rule. Always check your rule against a later term you were given."
+  },
+
+  // ── Numerical Reasoning: Number Matrices & Grids ──────────────────────────
+  {
+    question: "In each row the same rule turns the first two numbers into the third. Row 1: 8, 3 -> 5. Row 2: 12, 7 -> 5. Row 3: 15, 6 -> ?",
+    type: 'multiple_choice',
+    options: ["A) 7", "B) 8", "C) 9", "D) 21"],
+    correct_answer: "C) 9",
+    difficulty: 5,
+    topic_id: 'abstract_pattern_matrix',
+    hint: "Both given rows produce the same answer — what single operation does that?",
+    explanation: "The rule is first minus second: 8 - 3 = 5 and 12 - 7 = 5, so 15 - 6 = 9. Test a candidate rule against every row you are given before you use it."
+  },
+  {
+    question: "In each row the same rule turns the first two numbers into the third. Row 1: 4, 5 -> 20. Row 2: 6, 3 -> 18. Row 3: 7, 8 -> ?",
+    type: 'multiple_choice',
+    options: ["A) 15", "B) 48", "C) 54", "D) 56"],
+    correct_answer: "D) 56",
+    difficulty: 5,
+    topic_id: 'abstract_pattern_matrix',
+    hint: "The results are much larger than the inputs.",
+    explanation: "The rule is simply first x second: 4 x 5 = 20 and 6 x 3 = 18, so 7 x 8 = 56. When the output is far larger than either input, multiplication is the first rule to try."
+  },
+  {
+    question: "In each row the same rule turns the first two numbers into the third. Row 1: 9, 4 -> 26. Row 2: 7, 3 -> 20. Row 3: 6, 5 -> ?",
+    type: 'multiple_choice',
+    options: ["A) 11", "B) 21", "C) 22", "D) 30"],
+    correct_answer: "C) 22",
+    difficulty: 7,
+    topic_id: 'abstract_pattern_matrix',
+    hint: "Add the two numbers first, then see what happens to the total.",
+    explanation: "In row 1, 9 + 4 = 13 and 13 x 2 = 26; in row 2, 7 + 3 = 10 and 10 x 2 = 20. So row 3 gives 6 + 5 = 11 and 11 x 2 = 22. Combining the inputs before operating is a common two-stage matrix rule."
+  },
+
+  // ── Numerical Reasoning: Arithmetic Reasoning & Worded Logic ──────────────
+  {
+    question: "Maya is 3 times as old as her brother. In 4 years she will be twice as old as he is then. How old is Maya now?",
+    type: 'multiple_choice',
+    options: ["A) 6", "B) 9", "C) 12", "D) 15"],
+    correct_answer: "C) 12",
+    difficulty: 7,
+    topic_id: 'numerical_arithmetic',
+    hint: "Call the brother's age b and write both sentences as equations.",
+    explanation: "If the brother is b, Maya is 3b, and in 4 years 3b + 4 = 2(b + 4), which gives b = 4 and Maya = 12. Checking: now 12 and 4, in four years 16 and 8, which is exactly twice."
+  },
+  {
+    question: "Three friends share $84 so that each one gets twice as much as the next. How much does the friend with the smallest share receive?",
+    type: 'multiple_choice',
+    options: ["A) $12", "B) $14", "C) $21", "D) $24"],
+    correct_answer: "A) $12",
+    difficulty: 6,
+    topic_id: 'numerical_arithmetic',
+    hint: "Call the smallest share one part and write the other two in parts as well.",
+    explanation: "The shares are 1 part, 2 parts and 4 parts, which is 7 parts altogether, so one part is 84 divided by 7 = $12. Turning a doubling relationship into equal parts is the fastest route through these."
+  },
+  {
+    question: "The average of five numbers is 14. Four of them are 10, 12, 16 and 18. What is the fifth number?",
+    type: 'multiple_choice',
+    options: ["A) 12", "B) 14", "C) 16", "D) 20"],
+    correct_answer: "B) 14",
+    difficulty: 6,
+    topic_id: 'numerical_arithmetic',
+    hint: "An average of 14 across five numbers tells you the total.",
+    explanation: "Five numbers averaging 14 have a total of 70, and the four given numbers add to 56, so the fifth is 70 - 56 = 14. Convert an average into a total before you do anything else."
+  },
+  {
+    question: "One tap fills a tank in 12 minutes and another fills the same tank in 24 minutes. Working together, how long do they take to fill it?",
+    type: 'multiple_choice',
+    options: ["A) 6 minutes", "B) 8 minutes", "C) 18 minutes", "D) 36 minutes"],
+    correct_answer: "B) 8 minutes",
+    difficulty: 8,
+    topic_id: 'numerical_arithmetic',
+    hint: "Think about how much of the tank each tap fills in one minute.",
+    explanation: "In one minute the taps fill 1/12 and 1/24 of the tank, which together is 3/24 = 1/8 of the tank, so the whole tank takes 8 minutes. Working in 'amount per minute' turns every combined-rate question into a simple addition."
+  },
+  {
+    question: "A number is doubled and then 7 is subtracted, giving 33. What was the original number?",
+    type: 'multiple_choice',
+    options: ["A) 13", "B) 20", "C) 26", "D) 40"],
+    correct_answer: "B) 20",
+    difficulty: 5,
+    topic_id: 'numerical_arithmetic',
+    hint: "Undo the steps in the reverse order to the one given.",
+    explanation: "Working backwards, add 7 to get 40, then halve it to get 20. Checking forwards: 20 doubled is 40, minus 7 is 33. Reversing the operations in reverse order is the reliable method here."
+  },
+
+  // ── Numerical Reasoning: Number Properties & Relationships ────────────────
+  {
+    question: "What is the smallest whole number greater than 1 that leaves a remainder of 1 when it is divided by 2, by 3 and by 4?",
+    type: 'multiple_choice',
+    options: ["A) 7", "B) 11", "C) 13", "D) 25"],
+    correct_answer: "C) 13",
+    difficulty: 7,
+    topic_id: 'numerical_properties',
+    hint: "First find the smallest number that divides exactly by 2, 3 and 4.",
+    explanation: "The lowest common multiple of 2, 3 and 4 is 12, so 12 + 1 = 13 leaves a remainder of 1 in every case. A 'remainder of 1 every time' question is always the lowest common multiple plus one."
+  },
+  {
+    question: "How many different whole numbers divide exactly into 36?",
+    type: 'multiple_choice',
+    options: ["A) 6", "B) 8", "C) 9", "D) 10"],
+    correct_answer: "C) 9",
+    difficulty: 6,
+    topic_id: 'numerical_properties',
+    hint: "List them in pairs that multiply to 36 and watch for the pair that repeats.",
+    explanation: "The factors pair up as 1x36, 2x18, 3x12, 4x9 and 6x6, giving 1, 2, 3, 4, 6, 9, 12, 18 and 36 — nine in all. Square numbers always have an odd number of factors because one pair is a repeat."
+  },
+  {
+    question: "Which of these numbers is prime?",
+    type: 'multiple_choice',
+    options: ["A) 51", "B) 57", "C) 59", "D) 91"],
+    correct_answer: "C) 59",
+    difficulty: 7,
+    topic_id: 'numerical_properties',
+    hint: "Test each one against 3 and 7 before deciding.",
+    explanation: "51 = 3 x 17, 57 = 3 x 19 and 91 = 7 x 13, while 59 has no factor other than 1 and itself. Checking the digit sum for divisibility by 3 rules out two of these instantly."
+  },
+  {
+    question: "What is the largest whole number that divides exactly into both 84 and 126?",
+    type: 'multiple_choice',
+    options: ["A) 14", "B) 21", "C) 28", "D) 42"],
+    correct_answer: "D) 42",
+    difficulty: 7,
+    topic_id: 'numerical_properties',
+    hint: "Break both numbers into their prime factors and keep what they share.",
+    explanation: "84 = 2 x 2 x 3 x 7 and 126 = 2 x 3 x 3 x 7, and the shared factors are 2, 3 and 7, giving 2 x 3 x 7 = 42. Prime factorisation is the safest way to find a highest common factor under time pressure."
+  },
+  {
+    question: "The product of two consecutive whole numbers is 132. What is the smaller of the two numbers?",
+    type: 'multiple_choice',
+    options: ["A) 10", "B) 11", "C) 12", "D) 66"],
+    correct_answer: "B) 11",
+    difficulty: 6,
+    topic_id: 'numerical_properties',
+    hint: "Which number multiplied by itself is close to 132?",
+    explanation: "11 x 12 = 132, so the smaller number is 11. Since 11 x 11 = 121 and 12 x 12 = 144, the answer had to sit between 11 and 12 — estimating with the square root narrows it immediately."
+  },
+
+  // ── Numerical Reasoning: Rates, Ratio & Proportion ────────────────────────
+  {
+    question: "If 4 machines make 240 parts in an hour, how many parts do 7 machines make in an hour at the same rate?",
+    type: 'multiple_choice',
+    options: ["A) 380", "B) 400", "C) 420", "D) 480"],
+    correct_answer: "C) 420",
+    difficulty: 6,
+    topic_id: 'numerical_proportion',
+    hint: "Work out what a single machine produces first.",
+    explanation: "One machine makes 240 divided by 4 = 60 parts an hour, so 7 machines make 7 x 60 = 420. Reducing to one unit before scaling up is the standard method and it almost never goes wrong."
+  },
+  {
+    question: "A recipe for 6 people needs 450 g of rice. How much rice is needed for 10 people?",
+    type: 'multiple_choice',
+    options: ["A) 675 g", "B) 700 g", "C) 750 g", "D) 810 g"],
+    correct_answer: "C) 750 g",
+    difficulty: 5,
+    topic_id: 'numerical_proportion',
+    hint: "How much rice does one person need?",
+    explanation: "450 divided by 6 is 75 g per person, so 10 people need 750 g. Notice that 10 is not a whole multiple of 6, which is exactly why finding the per-person amount is worth the extra step."
+  },
+  {
+    question: "A car travels 165 km in 2 hours. At the same speed, how far does it travel in 5 hours?",
+    type: 'multiple_choice',
+    options: ["A) 330 km", "B) 412.5 km", "C) 425 km", "D) 400 km"],
+    correct_answer: "B) 412.5 km",
+    difficulty: 6,
+    topic_id: 'numerical_proportion',
+    hint: "Find the distance for one hour, even if it is not a whole number.",
+    explanation: "The speed is 165 divided by 2 = 82.5 km/h, so in 5 hours the car covers 82.5 x 5 = 412.5 km. Do not round the intermediate speed — half a kilometre per hour becomes 2.5 km over five hours."
+  },
+  {
+    question: "In a box the ratio of red counters to blue counters is 5 : 3. There are 96 counters altogether. How many are red?",
+    type: 'multiple_choice',
+    options: ["A) 36", "B) 50", "C) 60", "D) 64"],
+    correct_answer: "C) 60",
+    difficulty: 6,
+    topic_id: 'numerical_proportion',
+    hint: "How many equal parts is the box divided into?",
+    explanation: "The ratio has 5 + 3 = 8 parts, so one part is 96 divided by 8 = 12, and the red counters are 5 x 12 = 60. Always total the parts of a ratio before dividing."
+  },
+  {
+    question: "Six workers build a wall in 10 days. Working at the same rate, how long would 4 workers take to build the same wall?",
+    type: 'multiple_choice',
+    options: ["A) 6 days", "B) 12 days", "C) 15 days", "D) 20 days"],
+    correct_answer: "C) 15 days",
+    difficulty: 7,
+    topic_id: 'numerical_proportion',
+    hint: "Work out the total amount of work in 'worker-days' first.",
+    explanation: "The wall takes 6 x 10 = 60 worker-days, so 4 workers need 60 divided by 4 = 15 days. Fewer workers means more days, so this is inverse proportion — if your answer went down instead of up, you have divided the wrong way."
+  },
+
+  // ── Verbal Reasoning: Logical Deduction ───────────────────────────────────
+  {
+    question: "All members of the school choir can read music. Priya can read music. Which statement must be true?",
+    type: 'multiple_choice',
+    options: [
+      "A) Priya is a member of the choir.",
+      "B) Priya may or may not be a member of the choir.",
+      "C) Priya is not a member of the choir.",
+      "D) Everyone who can read music is in the choir."
+    ],
+    correct_answer: "B) Priya may or may not be a member of the choir.",
+    difficulty: 7,
+    topic_id: 'verbal_logical_deduction',
+    hint: "The statement runs one way only — check whether it also runs backwards.",
+    explanation: "We are told every choir member can read music, not that every music reader is in the choir, so Priya's ability tells us nothing about her membership. Reversing a one-way statement is the trap these questions are built around."
+  },
+  {
+    question: "Tom is taller than Sara. Sara is taller than Leo. Mia is shorter than Leo. Who is the shortest?",
+    type: 'multiple_choice',
+    options: ["A) Tom", "B) Sara", "C) Leo", "D) Mia"],
+    correct_answer: "D) Mia",
+    difficulty: 5,
+    topic_id: 'verbal_logical_deduction',
+    hint: "Write the names in a single line from tallest to shortest.",
+    explanation: "The order is Tom, Sara, Leo, Mia, so Mia is the shortest. Building one ordered list from the clues is faster and safer than holding the comparisons in your head."
+  },
+  {
+    question: "No reptiles are warm-blooded. All snakes are reptiles. Which conclusion must be true?",
+    type: 'multiple_choice',
+    options: [
+      "A) No snakes are warm-blooded.",
+      "B) Some snakes are warm-blooded.",
+      "C) All warm-blooded animals are snakes.",
+      "D) Some reptiles are not snakes."
+    ],
+    correct_answer: "A) No snakes are warm-blooded.",
+    difficulty: 6,
+    topic_id: 'verbal_logical_deduction',
+    hint: "If snakes sit inside the group of reptiles, what applies to all reptiles applies to them.",
+    explanation: "Snakes are a subset of reptiles, and nothing in the reptile group is warm-blooded, so no snake can be. Option D might well be true in reality, but it does not follow from the two statements given, and only what follows counts."
+  },
+
+  // ── Verbal Reasoning: Letter & Word Codes ─────────────────────────────────
+  {
+    question: "In a certain code CAT is written as DBU. How is DOG written in the same code?",
+    type: 'multiple_choice',
+    options: ["A) CNF", "B) DPH", "C) EPG", "D) EPH"],
+    correct_answer: "D) EPH",
+    difficulty: 5,
+    topic_id: 'verbal_codes',
+    hint: "Compare each letter of CAT with the matching letter of DBU.",
+    explanation: "Each letter moves forward one place in the alphabet, so D becomes E, O becomes P and G becomes H, giving EPH. Always check every letter of the example, not just the first."
+  },
+  {
+    question: "If FLOWER is written as REWOLF, how is GARDEN written in the same code?",
+    type: 'multiple_choice',
+    options: ["A) NADREG", "B) NEDARG", "C) NEDRAG", "D) GNEDRA"],
+    correct_answer: "C) NEDRAG",
+    difficulty: 5,
+    topic_id: 'verbal_codes',
+    hint: "Read the coded word backwards.",
+    explanation: "The code simply reverses the letters, and GARDEN reversed is NEDRAG. Writing the word out backwards letter by letter is safer than trying to reverse it in your head."
+  },
+  {
+    question: "In a certain language 'blue sky' is written as 'ka tor' and 'blue sea' is written as 'ka mel'. What does 'ka' mean?",
+    type: 'multiple_choice',
+    options: ["A) sky", "B) sea", "C) blue", "D) the"],
+    correct_answer: "C) blue",
+    difficulty: 6,
+    topic_id: 'verbal_codes',
+    hint: "Which English word appears in both phrases, and which code word appears in both?",
+    explanation: "'Blue' is the only English word in both phrases and 'ka' is the only code word in both, so 'ka' must mean blue. Matching what the phrases have in common is the whole technique for substitution codes."
+  },
+
+  // ── Verbal Reasoning: extra word relationships, completion and antonyms ───
+  {
+    question: "Which word belongs with this group: violin, cello, viola?",
+    type: 'multiple_choice',
+    options: ["A) trumpet", "B) double bass", "C) flute", "D) drum"],
+    correct_answer: "B) double bass",
+    difficulty: 6,
+    topic_id: 'verbal_word_relationships',
+    hint: "How is the sound produced on all three of the given instruments?",
+    explanation: "A violin, cello and viola are all bowed string instruments, and so is the double bass, while the trumpet and flute are wind instruments and the drum is percussion. Group by how something works, not by where you usually see it."
+  },
+  {
+    question: "Which pair of words has the same relationship as SHOAL is to FISH?",
+    type: 'multiple_choice',
+    options: ["A) pride : lions", "B) herd : sheep", "C) swarm : trees", "D) pack : birds"],
+    correct_answer: "A) pride : lions",
+    difficulty: 7,
+    topic_id: 'verbal_word_relationships',
+    hint: "A shoal is the correct collective noun for fish — which option uses the correct one?",
+    explanation: "A shoal of fish matches a pride of lions, because both are the proper collective noun for that animal. Sheep come in flocks, trees do not swarm, and birds come in flocks rather than packs."
+  },
+  {
+    question: "Choose the word that best completes the sentence: The evidence was so ______ that the jury reached its verdict within minutes.",
+    type: 'multiple_choice',
+    options: ["A) ambiguous", "B) tentative", "C) compelling", "D) trivial"],
+    correct_answer: "C) compelling",
+    difficulty: 6,
+    topic_id: 'verbal_sentence_completion',
+    hint: "The speed of the verdict tells you how strong the evidence was.",
+    explanation: "A verdict reached within minutes means the evidence was overwhelming, which is what 'compelling' describes. Ambiguous and tentative evidence would slow a jury down, and trivial evidence would not decide anything."
+  },
+  {
+    question: "Choose the word that best completes the sentence: Although the path looked ______, it turned out to be the quickest way to the summit.",
+    type: 'multiple_choice',
+    options: ["A) direct", "B) circuitous", "C) level", "D) brief"],
+    correct_answer: "B) circuitous",
+    difficulty: 7,
+    topic_id: 'verbal_sentence_completion',
+    hint: "The word 'although' signals a contrast with 'quickest'.",
+    explanation: "'Although' sets up a contrast, so the path must have looked slow — 'circuitous' means roundabout and winding. The other three would agree with 'quickest' rather than contrast with it."
+  },
+  {
+    question: "Which word is most nearly opposite in meaning to SCARCE?",
+    type: 'multiple_choice',
+    options: ["A) limited", "B) hidden", "C) rare", "D) abundant"],
+    correct_answer: "D) abundant",
+    difficulty: 5,
+    topic_id: 'verbal_antonyms',
+    hint: "Scarce means there is very little of something.",
+    explanation: "Scarce means in short supply, so its opposite is 'abundant', meaning plentiful. 'Limited' and 'rare' are near-synonyms of scarce, which is exactly why they are offered."
+  },
+  {
+    question: "DROUGHT is to RAIN as FAMINE is to:",
+    type: 'multiple_choice',
+    options: ["A) hunger", "B) food", "C) war", "D) desert"],
+    correct_answer: "B) food",
+    difficulty: 7,
+    topic_id: 'verbal_analogies',
+    hint: "State the first relationship as a sentence before looking at the options.",
+    explanation: "A drought is a severe shortage of rain, so a famine is a severe shortage of food. 'Hunger' is the result of a famine rather than the thing in short supply, which makes it the tempting wrong answer."
+  },
+
+  // ── Reading Comprehension: informational passage (mallee fowl) ────────────
+  {
+    question: "What is the main idea of this passage?",
+    type: 'multiple_choice',
+    options: [
+      "A) Rotting leaves give off a surprising amount of heat.",
+      "B) The mallee fowl incubates its eggs in a heated mound instead of sitting on them.",
+      "C) Mallee fowl chicks are stronger than the chicks of other birds.",
+      "D) The male mallee fowl is a careless parent."
+    ],
+    correct_answer: "B) The mallee fowl incubates its eggs in a heated mound instead of sitting on them.",
+    difficulty: 5,
+    topic_id: 'reading_main_idea',
+    passage: "The mallee fowl is one of the few birds that never sits on its eggs. Instead, the male spends up to eleven months of the year tending an enormous mound of sand and rotting leaves. As the leaves break down they release heat, and the male tests the temperature of the mound by pushing his beak deep into it. If the mound grows too warm he scrapes sand away; if it cools he piles more on. The chicks hatch underground and dig their way to the surface alone, receiving no help and no food from either parent.",
+    hint: "Ask what the passage is about as a whole, not what one sentence says.",
+    explanation: "Every part of the passage - the mound, the temperature testing, the chicks digging out - supports the single idea that this bird incubates without sitting on its eggs. The other options are details from the passage or claims it never makes."
+  },
+  {
+    question: "What does the passage suggest about the male mallee fowl's work?",
+    type: 'multiple_choice',
+    options: [
+      "A) It is demanding and almost constant.",
+      "B) It is shared equally with the female.",
+      "C) It finishes as soon as the eggs are laid.",
+      "D) It succeeds mostly by luck."
+    ],
+    correct_answer: "A) It is demanding and almost constant.",
+    difficulty: 7,
+    topic_id: 'reading_inference',
+    passage: "The mallee fowl is one of the few birds that never sits on its eggs. Instead, the male spends up to eleven months of the year tending an enormous mound of sand and rotting leaves. As the leaves break down they release heat, and the male tests the temperature of the mound by pushing his beak deep into it. If the mound grows too warm he scrapes sand away; if it cools he piles more on. The chicks hatch underground and dig their way to the surface alone, receiving no help and no food from either parent.",
+    hint: "Look at how long he spends on the mound and how often he has to check it.",
+    explanation: "Eleven months of the year, with the temperature checked and corrected in both directions, adds up to relentless work, even though the passage never uses the word 'hard'. Nothing in the text mentions the female helping, so option B goes beyond the evidence."
+  },
+  {
+    question: "In this passage, the word 'tending' most nearly means:",
+    type: 'multiple_choice',
+    options: [
+      "A) moving towards",
+      "B) leaning on",
+      "C) looking after",
+      "D) guarding against"
+    ],
+    correct_answer: "C) looking after",
+    difficulty: 6,
+    topic_id: 'reading_vocabulary',
+    passage: "The mallee fowl is one of the few birds that never sits on its eggs. Instead, the male spends up to eleven months of the year tending an enormous mound of sand and rotting leaves. As the leaves break down they release heat, and the male tests the temperature of the mound by pushing his beak deep into it. If the mound grows too warm he scrapes sand away; if it cools he piles more on. The chicks hatch underground and dig their way to the surface alone, receiving no help and no food from either parent.",
+    hint: "Substitute each option into the sentence and see which keeps the meaning.",
+    explanation: "The male builds, tests and adjusts the mound, which is looking after it. 'Tend' can mean 'move towards' in other sentences, which is why that option is offered, but it makes no sense with a mound of sand."
+  },
+  {
+    question: "What is the author's main purpose in this passage?",
+    type: 'multiple_choice',
+    options: [
+      "A) To persuade readers to protect the mallee fowl.",
+      "B) To explain an unusual nesting behaviour.",
+      "C) To describe a personal encounter with a bird.",
+      "D) To compare two Australian birds."
+    ],
+    correct_answer: "B) To explain an unusual nesting behaviour.",
+    difficulty: 6,
+    topic_id: 'reading_author_intent',
+    passage: "The mallee fowl is one of the few birds that never sits on its eggs. Instead, the male spends up to eleven months of the year tending an enormous mound of sand and rotting leaves. As the leaves break down they release heat, and the male tests the temperature of the mound by pushing his beak deep into it. If the mound grows too warm he scrapes sand away; if it cools he piles more on. The chicks hatch underground and dig their way to the surface alone, receiving no help and no food from either parent.",
+    hint: "Is the writer arguing, telling a story, or informing?",
+    explanation: "The passage gives neutral factual information about how the mound works, with no argument, no narrator and no second bird. When a text explains how something works without taking a side, its purpose is to inform."
+  },
+  {
+    question: "Why does the author describe what the male does when the mound is too warm and when it is too cool?",
+    type: 'multiple_choice',
+    options: [
+      "A) To show how carefully the temperature is controlled.",
+      "B) To prove that sand holds heat well.",
+      "C) To explain why the chicks hatch underground.",
+      "D) To suggest the bird is easily confused."
+    ],
+    correct_answer: "A) To show how carefully the temperature is controlled.",
+    difficulty: 6,
+    topic_id: 'reading_text_structure',
+    passage: "The mallee fowl is one of the few birds that never sits on its eggs. Instead, the male spends up to eleven months of the year tending an enormous mound of sand and rotting leaves. As the leaves break down they release heat, and the male tests the temperature of the mound by pushing his beak deep into it. If the mound grows too warm he scrapes sand away; if it cools he piles more on. The chicks hatch underground and dig their way to the surface alone, receiving no help and no food from either parent.",
+    hint: "Ask what the pair of opposite examples achieves together.",
+    explanation: "Giving both directions - scraping sand away and piling it on - shows the male correcting the mound either way, which demonstrates fine control. A single example would have shown effort; the pair shows precision."
+  },
+
+  // ── Reading Comprehension: literary passage (the lighthouse) ──────────────
+  {
+    question: "Why is Nina climbing the lighthouse tonight?",
+    type: 'multiple_choice',
+    options: [
+      "A) To replace a bulb so the light keeps working.",
+      "B) To count the steps again.",
+      "C) To look for her grandfather.",
+      "D) To shelter from the storm."
+    ],
+    correct_answer: "A) To replace a bulb so the light keeps working.",
+    difficulty: 6,
+    topic_id: 'reading_inference',
+    passage: "Nina had counted the lighthouse steps so many times that she no longer needed to look at her feet. One hundred and thirty-two. Tonight she took them two at a time, the torch beam jumping ahead of her. Her grandfather had kept the light for forty years and had never once let it fail, not in the storm of sixty-eight, not on the night the power lines came down. The wind pressed against the tower like a hand. At the top, Nina set down the spare bulb and looked out at the black water. Somewhere out there, a boat was waiting for her to be as reliable as he had been.",
+    hint: "One object she is carrying tells you the reason.",
+    explanation: "She sets down a spare bulb at the top, and the passage stresses that the light has never failed - so she is there to keep it lit. The text never says so directly, which is what makes this an inference."
+  },
+  {
+    question: "Which sentence best summarises the passage?",
+    type: 'multiple_choice',
+    options: [
+      "A) A girl climbs a lighthouse to carry on her grandfather's duty.",
+      "B) A storm damages a lighthouse and brings down its power lines.",
+      "C) A girl learns to count the steps of a tower in the dark.",
+      "D) A boat is lost at sea near a lighthouse."
+    ],
+    correct_answer: "A) A girl climbs a lighthouse to carry on her grandfather's duty.",
+    difficulty: 6,
+    topic_id: 'reading_main_idea',
+    passage: "Nina had counted the lighthouse steps so many times that she no longer needed to look at her feet. One hundred and thirty-two. Tonight she took them two at a time, the torch beam jumping ahead of her. Her grandfather had kept the light for forty years and had never once let it fail, not in the storm of sixty-eight, not on the night the power lines came down. The wind pressed against the tower like a hand. At the top, Nina set down the spare bulb and looked out at the black water. Somewhere out there, a boat was waiting for her to be as reliable as he had been.",
+    hint: "A summary must cover the whole passage, not one striking detail.",
+    explanation: "The climb, the grandfather's record and the waiting boat all point to one thing: Nina taking up his responsibility. The storm and the power lines are memories used as background, not the events of tonight."
+  },
+  {
+    question: "'The wind pressed against the tower like a hand' suggests the wind was:",
+    type: 'multiple_choice',
+    options: [
+      "A) warm and gentle",
+      "B) strong and steady",
+      "C) brief and sudden",
+      "D) barely noticeable"
+    ],
+    correct_answer: "B) strong and steady",
+    difficulty: 7,
+    topic_id: 'reading_vocabulary',
+    passage: "Nina had counted the lighthouse steps so many times that she no longer needed to look at her feet. One hundred and thirty-two. Tonight she took them two at a time, the torch beam jumping ahead of her. Her grandfather had kept the light for forty years and had never once let it fail, not in the storm of sixty-eight, not on the night the power lines came down. The wind pressed against the tower like a hand. At the top, Nina set down the spare bulb and looked out at the black water. Somewhere out there, a boat was waiting for her to be as reliable as he had been.",
+    hint: "Think about how a hand pushes, compared with how a gust hits.",
+    explanation: "A hand presses with continuous, deliberate force, so the image suggests wind that is both powerful and sustained. A sudden gust would have been described as a blow or a slap, not a press."
+  },
+  {
+    question: "The author mentions the storm of sixty-eight and the fallen power lines mainly to:",
+    type: 'multiple_choice',
+    options: [
+      "A) show how dependable her grandfather had been",
+      "B) explain why the lighthouse was built",
+      "C) warn the reader about dangerous weather",
+      "D) suggest the lighthouse is unsafe"
+    ],
+    correct_answer: "A) show how dependable her grandfather had been",
+    difficulty: 7,
+    topic_id: 'reading_author_intent',
+    passage: "Nina had counted the lighthouse steps so many times that she no longer needed to look at her feet. One hundred and thirty-two. Tonight she took them two at a time, the torch beam jumping ahead of her. Her grandfather had kept the light for forty years and had never once let it fail, not in the storm of sixty-eight, not on the night the power lines came down. The wind pressed against the tower like a hand. At the top, Nina set down the spare bulb and looked out at the black water. Somewhere out there, a boat was waiting for her to be as reliable as he had been.",
+    hint: "Notice what both examples have in common: the light stayed on.",
+    explanation: "Both are worst-case nights on which the light still did not fail, which builds a picture of complete reliability - the standard Nina now has to meet. Details in a narrative usually exist to develop character rather than to inform."
+  },
+  {
+    question: "The final sentence is effective because it:",
+    type: 'multiple_choice',
+    options: [
+      "A) links Nina's climb to the responsibility she now carries",
+      "B) introduces an important new character",
+      "C) explains how a lighthouse lamp works",
+      "D) returns to the number of steps she counted"
+    ],
+    correct_answer: "A) links Nina's climb to the responsibility she now carries",
+    difficulty: 7,
+    topic_id: 'reading_text_structure',
+    passage: "Nina had counted the lighthouse steps so many times that she no longer needed to look at her feet. One hundred and thirty-two. Tonight she took them two at a time, the torch beam jumping ahead of her. Her grandfather had kept the light for forty years and had never once let it fail, not in the storm of sixty-eight, not on the night the power lines came down. The wind pressed against the tower like a hand. At the top, Nina set down the spare bulb and looked out at the black water. Somewhere out there, a boat was waiting for her to be as reliable as he had been.",
+    hint: "Ask what the last sentence adds that the rest of the passage had not yet said.",
+    explanation: "The waiting boat turns a physical climb into an obligation, and naming her grandfather again ties her actions to his record. A strong closing sentence usually reframes what came before rather than adding new information."
+  },
+
+  // ── Reading Comprehension: persuasive passage (school start times) ────────
+  {
+    question: "What is the author's purpose in this passage?",
+    type: 'multiple_choice',
+    options: [
+      "A) To argue that schools should start later.",
+      "B) To explain how the human body clock works.",
+      "C) To describe a typical school morning.",
+      "D) To compare schools on three continents."
+    ],
+    correct_answer: "A) To argue that schools should start later.",
+    difficulty: 5,
+    topic_id: 'reading_author_intent',
+    passage: "Ask any teenager to describe a school morning and you will hear the same word: exhausted. Research from three continents now shows that adolescent body clocks shift later during puberty, so a fifteen-year-old told to sleep at nine simply lies awake. Schools that have pushed their start time back to 9am report fewer late arrivals, better marks and, most strikingly, fewer accidents among student drivers. Critics say a later start would disrupt families and sport. Those are real problems - but they are problems of timetabling, and timetables can be redrawn. Sleep cannot.",
+    hint: "Look at the last two sentences - is the writer neutral?",
+    explanation: "The passage raises an objection only to dismiss it and closes with a firm statement, which is the shape of an argument rather than an explanation. Informational writing does not answer its critics."
+  },
+  {
+    question: "The author includes the point about student drivers because it:",
+    type: 'multiple_choice',
+    options: [
+      "A) gives the argument a consequence readers will take seriously",
+      "B) proves that teenagers are careless drivers",
+      "C) shows that schools are unsafe places",
+      "D) explains why the research was carried out"
+    ],
+    correct_answer: "A) gives the argument a consequence readers will take seriously",
+    difficulty: 8,
+    topic_id: 'reading_inference',
+    passage: "Ask any teenager to describe a school morning and you will hear the same word: exhausted. Research from three continents now shows that adolescent body clocks shift later during puberty, so a fifteen-year-old told to sleep at nine simply lies awake. Schools that have pushed their start time back to 9am report fewer late arrivals, better marks and, most strikingly, fewer accidents among student drivers. Critics say a later start would disrupt families and sport. Those are real problems - but they are problems of timetabling, and timetables can be redrawn. Sleep cannot.",
+    hint: "Compare the weight of that point with the other two benefits listed.",
+    explanation: "Late arrivals and marks are school problems, but road accidents are a matter of safety, which is why the author calls it the most striking finding. Persuasive writers save their heaviest consequence for last."
+  },
+  {
+    question: "In this passage, the word 'disrupt' most nearly means:",
+    type: 'multiple_choice',
+    options: [
+      "A) improve slightly",
+      "B) delay briefly",
+      "C) throw into disorder",
+      "D) cancel completely"
+    ],
+    correct_answer: "C) throw into disorder",
+    difficulty: 6,
+    topic_id: 'reading_vocabulary',
+    passage: "Ask any teenager to describe a school morning and you will hear the same word: exhausted. Research from three continents now shows that adolescent body clocks shift later during puberty, so a fifteen-year-old told to sleep at nine simply lies awake. Schools that have pushed their start time back to 9am report fewer late arrivals, better marks and, most strikingly, fewer accidents among student drivers. Critics say a later start would disrupt families and sport. Those are real problems - but they are problems of timetabling, and timetables can be redrawn. Sleep cannot.",
+    hint: "The critics are describing what a later start would do to family routines.",
+    explanation: "The critics fear that existing arrangements would be thrown out of order, which is what 'disrupt' means. It is stronger than a brief delay but weaker than cancelling something outright."
+  },
+  {
+    question: "Why does the author mention what critics say?",
+    type: 'multiple_choice',
+    options: [
+      "A) To acknowledge the objection and then answer it.",
+      "B) To change the subject.",
+      "C) To admit that the argument has failed.",
+      "D) To introduce a new piece of research."
+    ],
+    correct_answer: "A) To acknowledge the objection and then answer it.",
+    difficulty: 7,
+    topic_id: 'reading_text_structure',
+    passage: "Ask any teenager to describe a school morning and you will hear the same word: exhausted. Research from three continents now shows that adolescent body clocks shift later during puberty, so a fifteen-year-old told to sleep at nine simply lies awake. Schools that have pushed their start time back to 9am report fewer late arrivals, better marks and, most strikingly, fewer accidents among student drivers. Critics say a later start would disrupt families and sport. Those are real problems - but they are problems of timetabling, and timetables can be redrawn. Sleep cannot.",
+    hint: "Read the sentence that comes immediately after the critics are mentioned.",
+    explanation: "The author calls the objections real, then reduces them to a timetabling problem that can be solved - raising a counter-argument in order to defeat it. Handling the other side directly makes an argument harder to dismiss."
+  },
+  {
+    question: "Which statement best expresses the author's main claim?",
+    type: 'multiple_choice',
+    options: [
+      "A) Later start times solve a biological problem, and the practical objections can be worked around.",
+      "B) Teenagers should simply go to bed earlier.",
+      "C) Sport and family routines matter more than sleep.",
+      "D) Research from three continents cannot be relied on."
+    ],
+    correct_answer: "A) Later start times solve a biological problem, and the practical objections can be worked around.",
+    difficulty: 6,
+    topic_id: 'reading_main_idea',
+    passage: "Ask any teenager to describe a school morning and you will hear the same word: exhausted. Research from three continents now shows that adolescent body clocks shift later during puberty, so a fifteen-year-old told to sleep at nine simply lies awake. Schools that have pushed their start time back to 9am report fewer late arrivals, better marks and, most strikingly, fewer accidents among student drivers. Critics say a later start would disrupt families and sport. Those are real problems - but they are problems of timetabling, and timetables can be redrawn. Sleep cannot.",
+    hint: "Combine the biological evidence with the way the author deals with the critics.",
+    explanation: "The passage argues both halves: body clocks make early starts unworkable, and the objections are matters of scheduling rather than principle. Option B is exactly the view the author sets out to refute."
+  },
+
   // ── Writing ────────────────────────────────────────────────────────────────
   {
     question: "You are planning a persuasive piece arguing that all students should learn a second language. Which of these would be the strongest opening paragraph?",

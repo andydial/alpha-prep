@@ -11,7 +11,15 @@ export interface Profile {
   formation: string | null
 }
 
-export type Domain = 'maths' | 'reading' | 'verbal' | 'abstract' | 'writing'
+/**
+ * Exam sections plus two legacy values.
+ *
+ * The EDSC Alpha paper is an EduTest: maths, reading, verbal and numerical
+ * reasoning, plus written expression. 'abstract' is kept in the union only so
+ * historical mastery and attempt rows from before the EduTest realignment still
+ * type-check — it is never selected for a session. See src/lib/examSpec.ts.
+ */
+export type Domain = 'maths' | 'reading' | 'verbal' | 'numerical' | 'abstract' | 'writing'
 export type DomainPair = [Domain, Domain]
 
 export interface Topic {
@@ -28,10 +36,14 @@ export interface Session {
   student_id: string
   started_at: string
   completed_at: string | null
-  session_type: 'practice' | 'timed_test' | 'drill'
+  session_type: 'practice' | 'timed_test' | 'drill' | 'writing'
   total_questions: number
   correct_count: number
   duration_seconds: number | null
+  /** Total seconds allowed for the whole test, or null when run untimed. */
+  time_limit_seconds: number | null
+  /** True when the countdown expired and the test was marked where it stood. */
+  timed_out: boolean
   week_number: number | null
   notes: string | null
   xp_earned: number
@@ -91,6 +103,9 @@ export interface Question {
   topic_id: string
   hint: string
   explanation: string
+  /** Reading comprehension only: the passage this question is asked about.
+   *  Several questions in a set share one passage, as they do on the paper. */
+  passage?: string
   /** Model's step-by-step solution to its own question, generated before
    *  correct_answer so the answer follows the reasoning. Used to verify the
    *  answer key; not shown to the student and not persisted. */
@@ -146,11 +161,23 @@ export interface StudentCard {
   player_cards?: PlayerCard
 }
 
-export type SessionMode = 'planned' | 'quick' | 'domain' | 'topic'
+export type SessionMode = 'planned' | 'quick' | 'domain' | 'topic' | 'writing'
 
 export interface SessionConfig {
   mode: SessionMode
   domainPair: DomainPair
   totalQuestions: number
   forcedTopicId?: string
+}
+
+/** EduTest written-expression rubric: four criteria, 0-4 each, 16 total. */
+export interface WritingMark {
+  ideas: number
+  structure: number
+  language: number
+  conventions: number
+  total: number
+  feedback: string
+  strengths: string[]
+  improvements: string[]
 }
