@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Loader2, PenLine } from 'lucide-react'
+import { ChevronLeft, Loader2, Pause, PenLine } from 'lucide-react'
 import { useUser } from '../hooks/useUser'
 import { useSettings } from '../hooks/useSettings'
 import { useCountdown } from '../hooks/useCountdown'
@@ -12,6 +12,7 @@ import { parseExamDate } from '../lib/examDate'
 import { writingTimeLimitSeconds, formatClock } from '../lib/sessionTimer'
 import { runSessionEnd } from '../lib/sessionEnd'
 import { SessionTimer } from '../components/SessionTimer'
+import { PauseOverlay } from '../components/PauseOverlay'
 import type { WritingMark } from '../types'
 
 /**
@@ -59,6 +60,7 @@ export function WritingTask() {
   const [text, setText] = useState('')
   const [mark, setMark] = useState<WritingMark | null>(null)
   const [timedOut, setTimedOut] = useState(false)
+  const [onBreak, setOnBreak] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const startedAt = useRef(0)
@@ -82,10 +84,20 @@ export function WritingTask() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsLoading])
 
-  const { remaining, start: startClock, stop: stopClock } = useCountdown(
+  const {
+    remaining, paused: clockPaused, start: startClock, stop: stopClock, setPaused: setClockPaused,
+  } = useCountdown(
     timeLimit,
     () => { void submit(true) },
   )
+
+  // Fifteen minutes is short, but a break is a break — dinner does not wait for
+  // the exam. The overlay hides the prompt and the draft so the pause cannot be
+  // spent composing. Prompt generation happens before the clock starts and
+  // marking happens after it stops, so neither needs holding here.
+  useEffect(() => {
+    setClockPaused(onBreak)
+  }, [onBreak, setClockPaused])
 
   function begin() {
     startedAt.current = Date.now()
@@ -238,7 +250,20 @@ export function WritingTask() {
             {style} · {timeLimit === null ? 'untimed' : `${Math.round(timeLimit / 60)} minutes`} · no planning time
           </p>
         </div>
-        {stage === 'writing' && <SessionTimer remaining={remaining} total={timeLimit} />}
+        {stage === 'writing' && (
+          <>
+            <SessionTimer remaining={remaining} total={timeLimit} paused={clockPaused} />
+            <button
+              onClick={() => setOnBreak(true)}
+              title="Pause and take a break"
+              className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white
+                         px-2 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500
+                         hover:bg-gray-800/60 transition-colors"
+            >
+              <Pause size={13} /> Pause
+            </button>
+          </>
+        )}
       </div>
 
       {/* Brief */}
@@ -309,6 +334,15 @@ export function WritingTask() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Break screen — over the page, so the draft in the textarea survives. */}
+      {onBreak && stage === 'writing' && (
+        <PauseOverlay
+          remaining={remaining}
+          detail={`${wordCount} words so far`}
+          onResume={() => setOnBreak(false)}
+        />
       )}
 
       {/* Marking */}

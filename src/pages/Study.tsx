@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Pause } from 'lucide-react'
 import { useUser } from '../hooks/useUser'
 import { useSettings } from '../hooks/useSettings'
 import { useStudySession } from '../hooks/useStudySession'
@@ -11,6 +11,7 @@ import { AnswerInput } from '../components/AnswerInput'
 import { ExplanationPanel } from '../components/ExplanationPanel'
 import { XPFlash } from '../components/XPFlash'
 import { SessionTimer } from '../components/SessionTimer'
+import { PauseOverlay } from '../components/PauseOverlay'
 import { SessionStreamBanner } from '../components/SessionStreamBanner'
 import { StreamTransitionScreen } from '../components/StreamTransitionScreen'
 import { SessionModeSelect } from './SessionModeSelect'
@@ -24,6 +25,9 @@ export function Study() {
   const [config, setConfig] = useState<SessionConfig | null>(null)
   const [showExitModal, setShowExitModal] = useState(false)
   const [timeUp, setTimeUp] = useState(false)
+  // A break the student asked for, as opposed to the clock being held while the
+  // app works. Both stop the countdown; only this one hides the question.
+  const [onBreak, setOnBreak] = useState(false)
 
   const domainPair: DomainPair = config?.domainPair ?? ['maths', 'verbal']
   const totalQuestions = config?.totalQuestions ?? 40
@@ -54,7 +58,32 @@ export function Study() {
     navigate('/study/results')
   }
 
-  const { remaining, start: startTimer } = useCountdown(timeLimitSeconds, () => { void handleTimeUp() })
+  const {
+    remaining, paused: clockPaused, start: startTimer, setPaused: setClockPaused,
+  } = useCountdown(timeLimitSeconds, () => { void handleTimeUp() })
+
+  // Time Aarav spends waiting on us is not time spent on the paper: generating a
+  // question and second-opinion marking a wrong answer are both round trips to
+  // the Anthropic API, and on a 60-second-per-question pace they were quietly
+  // eating whole questions' worth of the clock. Collapsing every reason to hold
+  // the clock into one boolean means the hook never has to reconcile competing
+  // callers — see useCountdown.setPaused.
+  const waitingOnApp = loading || evaluating
+  const clockShouldHold = waitingOnApp || onBreak
+
+  useEffect(() => {
+    setClockPaused(clockShouldHold)
+  }, [clockShouldHold, setClockPaused])
+
+  // A reload would lose the generated question, the blueprint and everything
+  // else held in memory, so make an accidental one cost a confirmation. The
+  // break screen is the supported way to step away.
+  useEffect(() => {
+    if (!config || timeUp) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault() }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [config, timeUp])
 
   useEffect(() => {
     if (!user || !config || settingsLoading) return
@@ -123,7 +152,17 @@ export function Study() {
                   questionNumber={questionNumber}
                 />
               </div>
-              <SessionTimer remaining={remaining} total={timeLimitSeconds} />
+              <SessionTimer remaining={remaining} total={timeLimitSeconds} paused={clockPaused} />
+              <button
+                onClick={() => setOnBreak(true)}
+                disabled={waitingOnApp}
+                title="Pause the test and take a break"
+                className="flex-shrink-0 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white
+                           px-2 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500 hover:bg-gray-800/60
+                           disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Pause size={13} /> Pause
+              </button>
               <button
                 onClick={() => setShowExitModal(true)}
                 className="flex-shrink-0 text-xs text-gray-600 hover:text-gray-400 px-2 py-1.5 rounded-lg hover:bg-gray-800/60 transition-colors"
@@ -184,6 +223,16 @@ export function Study() {
         )}
       </div>
       <XPFlash xp={xpEarned} show={showXPFlash} />
+
+      {/* Break screen. Rendered over the page rather than instead of it, so a
+          part-typed short answer survives the break. */}
+      {onBreak && (
+        <PauseOverlay
+          remaining={remaining}
+          detail={`Question ${questionNumber} of ${QUESTIONS_PER_SESSION}`}
+          onResume={() => setOnBreak(false)}
+        />
+      )}
 
       {/* Exit confirmation modal */}
       {showExitModal && (
