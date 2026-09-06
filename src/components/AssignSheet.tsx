@@ -3,11 +3,11 @@ import type { Slot } from '../lib/formations'
 import { SquadMiniCard } from './SquadMiniCard'
 
 export type SheetData =
-  // Tapped an empty slot — pick an eligible owned card to assign.
+  // Tapped an empty slot — pick any owned card to assign (natural fits listed first).
   | { kind: 'assign'; slot: Slot; eligible: StudentCard[] }
   // Tapped a filled slot — view the player, move to bench or cancel.
   | { kind: 'occupied'; slot: Slot; card: StudentCard }
-  // Tapped a bench card — assign it to the first open eligible slot.
+  // Tapped a bench card — assign it to the first open slot on the pitch.
   | { kind: 'bench'; card: StudentCard; targetSlotId: string | null }
 
 interface AssignSheetProps {
@@ -41,7 +41,7 @@ export function AssignSheet({
             <h2 className="text-white font-semibold text-lg">Assign {data.slot.label}</h2>
             {data.eligible.length === 0 ? (
               <div className="text-center py-6 space-y-3">
-                <p className="text-gray-400 text-sm">No {data.slot.pos} cards yet — visit the store!</p>
+                <p className="text-gray-400 text-sm">No cards yet — visit the store!</p>
                 <button
                   onClick={onGoStore}
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm transition-colors"
@@ -58,7 +58,15 @@ export function AssignSheet({
                     className="w-full flex items-center gap-3 bg-gray-800 hover:bg-gray-700 rounded-xl p-2 pr-3 transition-colors text-left"
                   >
                     <SquadMiniCard card={sc.player_cards} />
-                    <span className="flex-1 text-white text-sm font-medium truncate">{sc.player_cards.name}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-white text-sm font-medium truncate">{sc.player_cards.name}</span>
+                      <span className="block text-[11px] text-gray-400">
+                        {sc.player_cards.position ?? '—'}
+                        {sc.player_cards.position && sc.player_cards.position !== data.slot.pos && (
+                          <span className="text-amber-400"> · out of position</span>
+                        )}
+                      </span>
+                    </span>
                     <span className="text-xs font-semibold text-blue-400">
                       {sc.squad_position ? 'Move here' : 'Assign'}
                     </span>
@@ -99,6 +107,7 @@ export function AssignSheet({
               <SquadMiniCard card={data.card.player_cards} />
               <p className="text-gray-400 text-sm">
                 Plays <span className="text-white font-semibold">{data.card.player_cards.position ?? '—'}</span>
+                <span className="block text-[11px] text-gray-500">Can be played in any position.</span>
               </p>
             </div>
             {data.targetSlotId ? (
@@ -110,7 +119,7 @@ export function AssignSheet({
               </button>
             ) : (
               <p className="text-center text-sm text-gray-500 py-2">
-                All {data.card.player_cards.position} slots are filled — tap a slot to swap.
+                The pitch is full — tap any slot to swap this player in.
               </p>
             )}
           </>

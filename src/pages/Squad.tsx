@@ -51,9 +51,11 @@ export function Squad() {
     }
   }, [complete, loading])
 
-  // First open slot whose position matches `pos`, or null if all are filled.
+  // First open slot on the pitch, preferring one that matches the card's natural
+  // position. Any player can play anywhere, so this is only a sensible default.
   function openSlotFor(pos: string): string | null {
-    return slots.find((s) => s.pos === pos && !cardInSlot(s.id))?.id ?? null
+    const open = slots.filter((s) => !cardInSlot(s.id))
+    return (open.find((s) => s.pos === pos) ?? open[0])?.id ?? null
   }
 
   // Place `card` into `slotId`. If occupied, the two swap (occupant takes card's old spot).
@@ -101,7 +103,15 @@ export function Squad() {
     if (occupant) {
       setSheet({ kind: 'occupied', slot, card: occupant })
     } else {
-      const eligible = cards.filter((c) => c.player_cards?.position === slot.pos && c.squad_position !== slotId)
+      // Any owned player can fill any slot; natural fits are listed first.
+      const eligible = cards
+        .filter((c) => c.player_cards && c.squad_position !== slotId)
+        .sort((a, b) => {
+          const aFit = a.player_cards?.position === slot.pos ? 0 : 1
+          const bFit = b.player_cards?.position === slot.pos ? 0 : 1
+          if (aFit !== bFit) return aFit - bFit
+          return (b.player_cards?.rating ?? 0) - (a.player_cards?.rating ?? 0)
+        })
       setSheet({ kind: 'assign', slot, eligible })
     }
   }
